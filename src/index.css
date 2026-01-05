@@ -1,0 +1,32 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Custom styles */
+.ant-layout-sider {
+  @apply shadow-lg;
+}
+
+.ant-menu-item-selected {
+  @apply bg-primary-50 border-r-2 border-primary-500;
+}
+
+.dashboard-card {
+  @apply bg-white rounded-lg shadow-sm border border-gray-200 p-6;
+}
+
+.stat-card {
+  @apply bg-gradient-to-r from-blue-500 to-blue-600 text-white rounded-lg p-6 shadow-lg;
+}
+
+.stat-card.success {
+  @apply from-green-500 to-green-600;
+}
+
+.stat-card.warning {
+  @apply from-yellow-500 to-yellow-600;
+}
+
+.stat-card.danger {
+  @apply from-red-500 to-red-600;
+}
