@@ -3,26 +3,33 @@ import type { User } from '../types';
 export const hasPermission = (userProfile: User | null, requiredPermissions: string[], hotelId?: string): boolean => {
   if (!userProfile || !userProfile.isActive) return false;
   
-  // Use active hotel or provided hotelId
-  const targetHotelId = hotelId || userProfile.activeHotelId || userProfile.hotelId;
+  // Use active hotel or provided hotelId or first membership hotelId
+  const targetHotelId = hotelId || userProfile.activeHotelId || userProfile.hotelId || userProfile.memberships?.[0]?.hotelId;
   
-  // Check membership for specific hotel
+  // Check membership for specific hotel (new multi-hotel system)
   const membership = userProfile.memberships?.find(m => m.hotelId === targetHotelId);
   if (membership) {
     // Check membership permissions
     if (membership.role === 'admin') return true;
-    if (membership.permissions.includes('all')) return true;
+    if (membership.permissions?.includes('all')) return true;
     return requiredPermissions.every(permission => 
-      membership.permissions.includes(permission)
+      membership.permissions?.includes(permission)
     );
   }
   
-  // Fallback to legacy single-hotel permissions
+  // Fallback to legacy single-hotel permissions (for existing users)
   if (userProfile.role === 'admin') return true;
-  if (userProfile.permissions.includes('all')) return true;
-  return requiredPermissions.every(permission => 
-    userProfile.permissions.includes(permission)
-  );
+  if (userProfile.permissions?.includes('all')) return true;
+  
+  // Check if user has the required permissions in legacy format
+  if (userProfile.permissions && userProfile.permissions.length > 0) {
+    return requiredPermissions.every(permission => 
+      userProfile.permissions?.includes(permission)
+    );
+  }
+  
+  // If no permissions array, deny access
+  return false;
 };
 
 export const hasRole = (userProfile: User | null, requiredRoles: string[], hotelId?: string): boolean => {

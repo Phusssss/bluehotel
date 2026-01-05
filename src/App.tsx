@@ -66,7 +66,7 @@ const AppContent: React.FC = () => {
       } />
       
       <Route path="/rooms" element={
-        <ProtectedRoute>
+        <ProtectedRoute requiredPermissions={['manage_rooms']}>
           <Layout>
             <Rooms />
           </Layout>
@@ -74,7 +74,7 @@ const AppContent: React.FC = () => {
       } />
       
       <Route path="/reservations" element={
-        <ProtectedRoute>
+        <ProtectedRoute requiredPermissions={['view_reservations']}>
           <Layout>
             <Reservations />
           </Layout>
@@ -82,7 +82,7 @@ const AppContent: React.FC = () => {
       } />
       
       <Route path="/guests" element={
-        <ProtectedRoute>
+        <ProtectedRoute requiredPermissions={['view_reservations']}>
           <Layout>
             <Guests />
           </Layout>
@@ -90,7 +90,7 @@ const AppContent: React.FC = () => {
       } />
       
       <Route path="/invoices" element={
-        <ProtectedRoute>
+        <ProtectedRoute requiredPermissions={['manage_invoices']}>
           <Layout>
             <Invoices />
           </Layout>
@@ -98,7 +98,7 @@ const AppContent: React.FC = () => {
       } />
       
       <Route path="/services" element={
-        <ProtectedRoute>
+        <ProtectedRoute requiredPermissions={['manage_invoices']}>
           <Layout>
             <Services />
           </Layout>
@@ -106,7 +106,7 @@ const AppContent: React.FC = () => {
       } />
       
       <Route path="/staff" element={
-        <ProtectedRoute>
+        <ProtectedRoute requiredPermissions={['view_staffs']}>
           <Layout>
             <Staff />
           </Layout>

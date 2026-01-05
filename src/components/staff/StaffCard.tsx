@@ -1,6 +1,8 @@
 import React from 'react';
 import { Card, Tag, Avatar, Button, Dropdown } from 'antd';
 import { UserOutlined, MoreOutlined, EditOutlined, DeleteOutlined, EyeOutlined } from '@ant-design/icons';
+import { useAuthStore } from '../../store/useAuthStore';
+import { hasPermission } from '../../utils/permissionUtils';
 import type { Staff } from '../../types';
 
 interface StaffCardProps {
@@ -16,6 +18,10 @@ export const StaffCard: React.FC<StaffCardProps> = ({
   onDelete,
   onView
 }) => {
+  const { userProfile } = useAuthStore();
+  
+  const canEdit = hasPermission(userProfile, ['update_staff'], userProfile?.hotelId);
+  const canDelete = hasPermission(userProfile, ['delete_staff'], userProfile?.hotelId);
   const getStatusColor = (status: string) => {
     const colors = {
       active: 'green',
@@ -43,19 +49,19 @@ export const StaffCard: React.FC<StaffCardProps> = ({
       icon: <EyeOutlined />,
       onClick: () => onView(staff)
     },
-    {
+    ...(canEdit ? [{
       key: 'edit',
       label: 'Chỉnh sửa',
       icon: <EditOutlined />,
       onClick: () => onEdit(staff)
-    },
-    {
+    }] : []),
+    ...(canDelete ? [{
       key: 'delete',
       label: 'Xóa',
       icon: <DeleteOutlined />,
       onClick: () => onDelete(staff.id!),
       danger: true
-    }
+    }] : [])
   ];
 
   return (
@@ -71,14 +77,14 @@ export const StaffCard: React.FC<StaffCardProps> = ({
         >
           Xem
         </Button>,
-        <Button
+        ...(canEdit ? [<Button
           key="edit"
           type="text"
           icon={<EditOutlined />}
           onClick={() => onEdit(staff)}
         >
           Sửa
-        </Button>,
+        </Button>] : []),
         <Dropdown menu={{ items: menuItems }} trigger={['click']}>
           <Button type="text" icon={<MoreOutlined />} />
         </Dropdown>

@@ -6,6 +6,7 @@ import {
   addDoc,
   updateDoc,
   deleteDoc,
+  setDoc,
   query,
   where,
   orderBy,
@@ -13,7 +14,7 @@ import {
   startAfter,
   DocumentSnapshot
 } from 'firebase/firestore';
-import { createUserWithEmailAndPassword, sendEmailVerification } from 'firebase/auth';
+import { createUserWithEmailAndPassword, sendEmailVerification, sendPasswordResetEmail } from 'firebase/auth';
 import { auth, db } from '../config/firebaseConfig';
 import { formatFirebaseError } from '../utils/errorUtils';
 import type { Staff, StaffFilter, HotelMembership } from '../types';
@@ -125,32 +126,27 @@ export const staffService = {
           );
           userId = userCredential.user.uid;
 
-          // Send email verification
-          await sendEmailVerification(userCredential.user);
+          // Send password reset email instead of verification
+          // This allows staff to set their own password and verify email at once
+          await sendPasswordResetEmail(auth, staffData.email);
+          
+          console.log(`✅ Đã gửi email đặt lại mật khẩu đến ${staffData.email}`);
+          console.log('📧 Nhân viên sẽ nhận email để đặt mật khẩu và xác thực tài khoản');
 
-          // Update user document with membership
+          // Create user document with membership (same hotel as creator)
           const membership: HotelMembership = {
             hotelId: staffData.hotelId,
             role: staffData.role,
-            permissions: staffData.permissions
+            permissions: staffData.permissions,
+            staffId: '' // Will be updated after staff creation
           };
 
-          const userDocRef = doc(db, 'users', userId);
-          const userDoc = await getDoc(userDocRef);
-          
-          if (userDoc.exists()) {
-            const userData = userDoc.data();
-            const memberships = userData.memberships || [];
-            memberships.push(membership);
-            await updateDoc(userDocRef, { memberships });
-          } else {
-            await updateDoc(userDocRef, {
-              email: staffData.email,
-              memberships: [membership],
-              isActive: true,
-              createdAt: new Date()
-            });
-          }
+          await setDoc(doc(db, 'users', userId), {
+            email: staffData.email,
+            memberships: [membership],
+            isActive: true,
+            createdAt: new Date()
+          });
         } catch (authError) {
           console.error('Error creating user account:', authError);
           // Continue with staff creation even if user creation fails
@@ -158,8 +154,12 @@ export const staffService = {
       }
 
       // Create staff document
+      const cleanStaffData = Object.fromEntries(
+        Object.entries(staffData).filter(([_, value]) => value !== undefined)
+      );
+      
       const docRef = await addDoc(collection(db, COLLECTION_NAME), {
-        ...staffData,
+        ...cleanStaffData,
         userId,
         isDeleted: false,
         createdAt: new Date(),

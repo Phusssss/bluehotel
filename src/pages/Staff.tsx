@@ -6,7 +6,8 @@ import { useAuthStore } from '../store/useAuthStore';
 import { StaffCard } from '../components/staff/StaffCard';
 import { StaffForm } from '../components/staff/StaffForm';
 import { formatFirebaseError } from '../utils/errorUtils';
-import type { Staff } from '../types';
+import { hasPermission } from '../utils/permissionUtils';
+import type { Staff as StaffType } from '../types';
 
 const { Title } = Typography;
 const { confirm } = Modal;
@@ -92,12 +93,12 @@ export const Staff: React.FC = () => {
     });
   };
 
-  const handleEditStaff = (staff: Staff) => {
+  const handleEditStaff = (staff: StaffType) => {
     setSelectedStaff(staff);
     setShowForm(true);
   };
 
-  const handleViewStaff = (staff: Staff) => {
+  const handleViewStaff = (staff: StaffType) => {
     // TODO: Implement staff detail view
     message.info('Chức năng xem chi tiết đang được phát triển');
   };
@@ -168,6 +169,7 @@ export const Staff: React.FC = () => {
             setSelectedStaff(null);
             setShowForm(true);
           }}
+          disabled={!hasPermission(userProfile, ['create_staff'], userProfile?.hotelId)}
         >
           Thêm nhân viên
         </Button>
@@ -208,7 +210,7 @@ export const Staff: React.FC = () => {
         </div>
 
         {/* Bulk Operations */}
-        {selectedStaffs.length > 0 && (
+        {selectedStaffs.length > 0 && hasPermission(userProfile, ['update_staff'], userProfile?.hotelId) && (
           <div className="flex items-center gap-2 p-3 bg-blue-50 border border-blue-200 rounded-lg">
             <span className="text-blue-700">
               Đã chọn {selectedStaffs.length} nhân viên
