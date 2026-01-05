@@ -1,7 +1,9 @@
 import React, { useState } from 'react';
 import { Form, Input, Button, Card, Typography, message, Divider } from 'antd';
 import { UserOutlined, LockOutlined, SettingOutlined } from '@ant-design/icons';
+import { Link } from 'react-router-dom';
 import { authService } from '../services/authService';
+import { formatFirebaseError } from '../utils/errorUtils';
 import { useAuthStore } from '../store/useAuthStore';
 import { SetupData } from '../components/common/SetupData';
 
@@ -25,12 +27,9 @@ export const Login: React.FC = () => {
       await authService.signIn(values.email, values.password);
       message.success('Đăng nhập thành công!');
     } catch (error: any) {
-      setError(error.message);
-      if (error.message.includes('invalid-credential')) {
-        message.error('Tài khoản không tồn tại. Vui lòng tạo dữ liệu mẫu trước!');
-      } else {
-        message.error('Đăng nhập thất bại: ' + error.message);
-      }
+      const msg = formatFirebaseError(error);
+      setError(msg);
+      message.error(msg);
     } finally {
       setLoading(false);
     }
@@ -107,6 +106,11 @@ export const Login: React.FC = () => {
           <Text type="secondary">
             Demo: admin@hotel.com / password123
           </Text>
+          <div className="mt-2">
+            <Link to="/forgot-password" className="text-blue-600 hover:text-blue-800">
+              Quên mật khẩu?
+            </Link>
+          </div>
         </div>
       </Card>
     </div>

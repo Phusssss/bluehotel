@@ -172,7 +172,26 @@ export const reservationService = {
     }
   },
 
-  // Get reservation by ID
+  // Get reservations by room ID
+  async getReservationsByRoom(hotelId: string, roomId: string): Promise<Reservation[]> {
+    try {
+      const q = query(
+        collection(db, COLLECTION_NAME),
+        where('hotelId', '==', hotelId),
+        where('roomId', '==', roomId),
+        orderBy('checkInDate', 'desc')
+      );
+
+      const querySnapshot = await getDocs(q);
+      return querySnapshot.docs.map(doc => ({
+        id: doc.id,
+        ...doc.data()
+      } as Reservation));
+    } catch (error) {
+      console.error('Error getting reservations by room:', error);
+      throw error;
+    }
+  },
   async getReservationById(reservationId: string): Promise<Reservation | null> {
     try {
       const docRef = doc(db, COLLECTION_NAME, reservationId);
@@ -455,12 +474,12 @@ export const reservationService = {
       
       if (format === 'excel') {
         const excelContent = this.generateExcel(reservations);
-        return new Blob([excelContent], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+        return new Blob([excelContent], { type: 'text/csv;charset=utf-8;' });
       }
       
       if (format === 'pdf') {
         const pdfContent = this.generatePDF(reservations);
-        return new Blob([pdfContent], { type: 'application/pdf' });
+        return new Blob([pdfContent], { type: 'text/plain;charset=utf-8;' });
       }
       
       throw new Error('Unsupported format');
@@ -494,54 +513,21 @@ export const reservationService = {
   },
 
   // Helper: Generate Excel
-  generateExcel(reservations: Reservation[]): ArrayBuffer {
-    const XLSX = require('xlsx');
-    
-    const data = reservations.map(res => ({
-      'ID': res.id,
-      'Guest Name': res.guestName || '',
-      'Room Number': res.roomNumber || '',
-      'Check-in': res.checkInDate,
-      'Check-out': res.checkOutDate,
-      'Status': res.status,
-      'Total Price': res.totalPrice,
-      'Payment Status': res.paymentStatus,
-      'Source': res.source,
-      'Confirmation Code': res.confirmationCode
-    }));
-    
-    const worksheet = XLSX.utils.json_to_sheet(data);
-    const workbook = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(workbook, worksheet, 'Reservations');
-    
-    return XLSX.write(workbook, { bookType: 'xlsx', type: 'array' });
+  generateExcel(reservations: Reservation[]): string {
+    // Simple CSV format for now - can be enhanced with actual Excel library
+    return this.generateCSV(reservations);
   },
 
   // Helper: Generate PDF
-  generatePDF(reservations: Reservation[]): ArrayBuffer {
-    const jsPDF = require('jspdf').jsPDF;
-    const doc = new jsPDF();
-    
-    doc.setFontSize(16);
-    doc.text('Reservations Report', 20, 20);
-    
-    let yPosition = 40;
-    doc.setFontSize(10);
-    
+  generatePDF(reservations: Reservation[]): string {
+    // Simple text format for now - can be enhanced with actual PDF library
+    let content = 'Reservations Report\n\n';
     reservations.forEach((res, index) => {
-      if (yPosition > 280) {
-        doc.addPage();
-        yPosition = 20;
-      }
-      
-      doc.text(`${index + 1}. ${res.guestName || 'N/A'} - Room ${res.roomNumber || 'N/A'}`, 20, yPosition);
-      doc.text(`   ${res.checkInDate} to ${res.checkOutDate} - ${res.status}`, 20, yPosition + 10);
-      doc.text(`   Total: $${res.totalPrice} - ${res.paymentStatus}`, 20, yPosition + 20);
-      
-      yPosition += 30;
+      content += `${index + 1}. ${res.guestName || 'N/A'} - Room ${res.roomNumber || 'N/A'}\n`;
+      content += `   ${res.checkInDate} to ${res.checkOutDate} - ${res.status}\n`;
+      content += `   Total: ${res.totalPrice} - ${res.paymentStatus}\n\n`;
     });
-    
-    return doc.output('arraybuffer');
+    return content;
   },
 
   // ✨ NEW: Detect conflicts

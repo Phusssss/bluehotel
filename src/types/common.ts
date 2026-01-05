@@ -22,9 +22,18 @@ export interface User extends BaseEntity {
   permissions: string[];
   lastLogin?: Date;
   isActive: boolean;
+  memberships?: HotelMembership[]; // Multi-hotel support
+  activeHotelId?: string; // Currently selected hotel
 }
 
-export type RoomStatus = 'available' | 'occupied' | 'maintenance' | 'blocked';
+export interface HotelMembership {
+  hotelId: string;
+  role: string;
+  permissions: string[];
+  staffId?: string;
+}
+
+export type RoomStatus = 'available' | 'occupied' | 'maintenance' | 'blocked' | 'cleaning' | 'out-of-order';
 export type RoomType = 'single' | 'double' | 'suite' | 'deluxe';
 export type ReservationStatus = 'pending' | 'confirmed' | 'checked-in' | 'checked-out' | 'cancelled';
 export type PaymentStatus = 'pending' | 'paid' | 'partial';

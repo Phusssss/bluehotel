@@ -7,14 +7,15 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { Layout } from './components/common/Layout';
 import { ProtectedRoute } from './components/common/ProtectedRoute';
 import { Login } from './pages/Login';
+import { ForgotPassword } from './components/auth/ForgotPassword';
 import { Dashboard } from './pages/Dashboard';
 import { Rooms } from './pages/Rooms';
+import { Staff } from './pages/Staff';
 import { 
   Reservations, 
   Guests, 
   Invoices, 
   Services, 
-  Staff, 
   Maintenance, 
   Reports, 
   Settings, 
@@ -49,6 +50,11 @@ const AppContent: React.FC = () => {
       <Route 
         path="/login" 
         element={isAuthenticated ? <Navigate to="/" replace /> : <Login />} 
+      />
+      
+      <Route 
+        path="/forgot-password" 
+        element={isAuthenticated ? <Navigate to="/" replace /> : <ForgotPassword />} 
       />
       
       <Route path="/" element={

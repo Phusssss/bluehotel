@@ -11,6 +11,16 @@ export interface Room extends BaseEntity {
   amenities: string[];
   images: string[];
   lastUpdated: Date;
+  isDeleted?: boolean;
+  deletedAt?: Date;
+  blockedDates?: BlockedDate[];
+}
+
+export interface BlockedDate {
+  startDate: Date;
+  endDate: Date;
+  reason: string;
+  type: 'maintenance' | 'renovation' | 'other';
 }
 
 export interface RoomFilter {

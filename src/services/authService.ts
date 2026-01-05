@@ -2,12 +2,19 @@ import {
   signInWithEmailAndPassword, 
   signOut, 
   createUserWithEmailAndPassword,
-  onAuthStateChanged
+  onAuthStateChanged,
+  sendPasswordResetEmail,
+  sendEmailVerification,
+  updatePassword,
+  updateEmail,
+  reauthenticateWithCredential,
+  EmailAuthProvider
 } from 'firebase/auth';
 import type { User as FirebaseUser } from 'firebase/auth';
 import { doc, getDoc, setDoc } from 'firebase/firestore';
 import { auth, db } from '../config/firebaseConfig';
 import type { User } from '../types';
+import { formatFirebaseError } from '../utils/errorUtils';
 
 export const authService = {
   // Sign in
@@ -16,7 +23,7 @@ export const authService = {
       const result = await signInWithEmailAndPassword(auth, email, password);
       return result.user;
     } catch (error: any) {
-      throw new Error(error.message);
+      throw new Error(formatFirebaseError(error));
     }
   },
 
@@ -25,7 +32,7 @@ export const authService = {
     try {
       await signOut(auth);
     } catch (error: any) {
-      throw new Error(error.message);
+      throw new Error(formatFirebaseError(error));
     }
   },
 
@@ -49,7 +56,7 @@ export const authService = {
       await setDoc(doc(db, 'users', result.user.uid), userProfile);
       return result.user;
     } catch (error: any) {
-      throw new Error(error.message);
+      throw new Error(formatFirebaseError(error));
     }
   },
 
@@ -64,7 +71,59 @@ export const authService = {
       }
       return null;
     } catch (error: any) {
-      throw new Error(error.message);
+      throw new Error(formatFirebaseError(error));
+    }
+  },
+
+  // Password reset
+  async sendPasswordResetEmail(email: string) {
+    try {
+      await sendPasswordResetEmail(auth, email);
+    } catch (error: any) {
+      throw new Error(formatFirebaseError(error));
+    }
+  },
+
+  // Email verification
+  async sendEmailVerification(user: FirebaseUser) {
+    try {
+      await sendEmailVerification(user);
+    } catch (error: any) {
+      throw new Error(formatFirebaseError(error));
+    }
+  },
+
+  // Update password
+  async updatePassword(newPassword: string) {
+    try {
+      const user = auth.currentUser;
+      if (!user) throw new Error('Không có người dùng đăng nhập');
+      await updatePassword(user, newPassword);
+    } catch (error: any) {
+      throw new Error(formatFirebaseError(error));
+    }
+  },
+
+  // Update email
+  async updateEmail(newEmail: string) {
+    try {
+      const user = auth.currentUser;
+      if (!user) throw new Error('Không có người dùng đăng nhập');
+      await updateEmail(user, newEmail);
+    } catch (error: any) {
+      throw new Error(formatFirebaseError(error));
+    }
+  },
+
+  // Re-authenticate
+  async reauthenticate(password: string) {
+    try {
+      const user = auth.currentUser;
+      if (!user || !user.email) throw new Error('Không có người dùng đăng nhập');
+      const credential = EmailAuthProvider.credential(user.email, password);
+      await reauthenticateWithCredential(user, credential);
+    } catch (error: any) {
+      throw new Error(formatFirebaseError(error));
     }
   },
 
