@@ -12,6 +12,7 @@ import {
   ToolOutlined,
   BarChartOutlined,
   SettingOutlined,
+  BellOutlined,
 } from '@ant-design/icons';
 
 const { Sider } = Layout;
@@ -29,6 +30,11 @@ export const Sidebar: React.FC<SidebarProps> = ({ collapsed }) => {
       key: '/',
       icon: <DashboardOutlined />,
       label: 'Dashboard',
+    },
+    {
+      key: '/alerts',
+      icon: <BellOutlined />,
+      label: 'Cảnh báo',
     },
     {
       key: '/rooms',

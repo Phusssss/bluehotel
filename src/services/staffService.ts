@@ -232,8 +232,13 @@ export const staffService = {
 
       const updatedAudit = [...(currentData.audit || []), auditEntry];
 
+      // Clean undefined values before update
+      const cleanUpdates = Object.fromEntries(
+        Object.entries(updates).filter(([_, value]) => value !== undefined)
+      );
+
       await updateDoc(docRef, {
-        ...updates,
+        ...cleanUpdates,
         audit: updatedAudit,
         updatedAt: new Date()
       });

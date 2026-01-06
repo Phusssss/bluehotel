@@ -44,7 +44,7 @@ export const Rooms: React.FC = () => {
     if (userProfile?.hotelId) {
       fetchRooms(userProfile.hotelId);
     }
-  }, [userProfile?.hotelId, filter]);
+  }, [userProfile?.hotelId, filter, fetchRooms]);
 
   const handleCreateRoom = async (values: any) => {
     try {
@@ -138,9 +138,12 @@ export const Rooms: React.FC = () => {
       const searchLower = filter.search.toLowerCase();
       const matchesSearch = 
         room.roomNumber.toLowerCase().includes(searchLower) ||
-        room.amenities.some(amenity => amenity.toLowerCase().includes(searchLower));
+        room.amenities?.some(amenity => amenity.toLowerCase().includes(searchLower));
       if (!matchesSearch) return false;
     }
+    if (filter.status && room.status !== filter.status) return false;
+    if (filter.roomType && room.roomType !== filter.roomType) return false;
+    if (filter.floor && room.floor !== filter.floor) return false;
     return true;
   });
 

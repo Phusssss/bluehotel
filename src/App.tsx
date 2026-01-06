@@ -9,14 +9,15 @@ import { ProtectedRoute } from './components/common/ProtectedRoute';
 import { Login } from './pages/Login';
 import { ForgotPassword } from './components/auth/ForgotPassword';
 import { Dashboard } from './pages/Dashboard';
+import { Alerts } from './pages/Alerts';
 import { Rooms } from './pages/Rooms';
 import { Staff } from './pages/Staff';
+import { Maintenance } from './pages/Maintenance';
 import { 
   Reservations, 
   Guests, 
   Invoices, 
   Services, 
-  Maintenance, 
   Reports, 
   Settings, 
   NotFound 
@@ -61,6 +62,14 @@ const AppContent: React.FC = () => {
         <ProtectedRoute>
           <Layout>
             <Dashboard />
+          </Layout>
+        </ProtectedRoute>
+      } />
+      
+      <Route path="/alerts" element={
+        <ProtectedRoute requiredPermissions={['view_alerts']}>
+          <Layout>
+            <Alerts />
           </Layout>
         </ProtectedRoute>
       } />
@@ -114,7 +123,7 @@ const AppContent: React.FC = () => {
       } />
       
       <Route path="/maintenance" element={
-        <ProtectedRoute>
+        <ProtectedRoute requiredPermissions={['manage_maintenance']}>
           <Layout>
             <Maintenance />
           </Layout>

@@ -25,8 +25,7 @@ export const roomService = {
       let q = query(
         collection(db, COLLECTION_NAME),
         where('hotelId', '==', hotelId),
-        where('isDeleted', '!=', true),
-        orderBy('isDeleted'),
+        where('isDeleted', '==', false),
         orderBy('roomNumber')
       );
 
@@ -36,6 +35,10 @@ export const roomService = {
 
       if (filter?.roomType) {
         q = query(q, where('roomType', '==', filter.roomType));
+      }
+
+      if (filter?.floor) {
+        q = query(q, where('floor', '==', filter.floor));
       }
 
       if (filter?.limit) {
@@ -85,7 +88,7 @@ export const roomService = {
           collection(db, COLLECTION_NAME),
           where('hotelId', '==', roomData.hotelId),
           where('roomNumber', '==', roomData.roomNumber),
-          where('isDeleted', '!=', true)
+          where('isDeleted', '==', false)
         )
       );
       

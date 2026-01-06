@@ -24,10 +24,17 @@ export const StaffForm: React.FC<StaffFormProps> = ({
   useEffect(() => {
     if (visible) {
       if (staff) {
-        form.setFieldsValue({
+        const formValues = {
           ...staff,
           startDate: staff.startDate ? dayjs(staff.startDate) : null
+        };
+        // Remove undefined values
+        Object.keys(formValues).forEach(key => {
+          if (formValues[key as keyof typeof formValues] === undefined) {
+            delete formValues[key as keyof typeof formValues];
+          }
         });
+        form.setFieldsValue(formValues);
       } else {
         form.resetFields();
       }
@@ -35,12 +42,20 @@ export const StaffForm: React.FC<StaffFormProps> = ({
   }, [visible, staff, form]);
 
   const handleSubmit = (values: any) => {
-    const formData = {
-      ...values,
-      startDate: values.startDate ? values.startDate.toDate() : null
+    // Extract createUserAccount before cleaning
+    const createUserAccount = values.createUserAccount || false;
+    
+    // Clean undefined values
+    const cleanValues = Object.fromEntries(
+      Object.entries(values).filter(([_, value]) => value !== undefined && value !== null && value !== '')
+    );
+    
+    const formData: any = {
+      ...cleanValues,
+      startDate: values.startDate ? values.startDate.toDate() : undefined
     };
     
-    const createUserAccount = values.createUserAccount || false;
+    // Remove createUserAccount from formData
     delete formData.createUserAccount;
     
     onSubmit(formData, createUserAccount);

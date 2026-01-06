@@ -1,10 +1,12 @@
 import React, { useEffect, useState } from 'react';
-import { Button, Typography, Space, message, Modal, Spin, Input, Select, Checkbox } from 'antd';
-import { PlusOutlined, SearchOutlined, FilterOutlined } from '@ant-design/icons';
+import { Button, Typography, Space, message, Modal, Spin, Tabs, Select } from 'antd';
+import { PlusOutlined, DeleteOutlined, AppstoreOutlined, UnorderedListOutlined } from '@ant-design/icons';
 import { useStaffStore } from '../store/useStaffStore';
 import { useAuthStore } from '../store/useAuthStore';
 import { StaffCard } from '../components/staff/StaffCard';
+import { StaffList } from '../components/staff/StaffList';
 import { StaffForm } from '../components/staff/StaffForm';
+import { StaffFilterComponent } from '../components/staff/StaffFilter';
 import { formatFirebaseError } from '../utils/errorUtils';
 import { hasPermission } from '../utils/permissionUtils';
 import type { Staff as StaffType } from '../types';
@@ -35,13 +37,14 @@ export const Staff: React.FC = () => {
   } = useStaffStore();
 
   const [showForm, setShowForm] = useState(false);
-  const [searchText, setSearchText] = useState('');
+  const [tabKey, setTabKey] = useState('all');
+  const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
 
   useEffect(() => {
-    if (userProfile?.hotelId) {
+    if (userProfile?.hotelId && hasPermission(userProfile, ['view_staffs'], userProfile.hotelId)) {
       fetchStaffs(userProfile.hotelId);
     }
-  }, [userProfile?.hotelId, filter]);
+  }, [userProfile?.hotelId, filter, fetchStaffs]);
 
   const handleCreateStaff = async (values: any, createUserAccount = false) => {
     try {
@@ -99,17 +102,7 @@ export const Staff: React.FC = () => {
   };
 
   const handleViewStaff = (staff: StaffType) => {
-    // TODO: Implement staff detail view
     message.info('Chức năng xem chi tiết đang được phát triển');
-  };
-
-  const handleSearch = (value: string) => {
-    setSearchText(value);
-    setFilter({ ...filter, search: value });
-  };
-
-  const handleFilterChange = (key: string, value: any) => {
-    setFilter({ ...filter, [key]: value });
   };
 
   const handleBulkStatusUpdate = () => {
@@ -123,7 +116,7 @@ export const Staff: React.FC = () => {
           <Select
             className="w-full mt-2"
             placeholder="Chọn trạng thái"
-            onChange={(status) => {
+            onChange={(status: string) => {
               Modal.destroyAll();
               bulkUpdateStatus(selectedStaffs, status).then(() => {
                 message.success(`Đã cập nhật trạng thái cho ${selectedStaffs.length} nhân viên`);
@@ -142,157 +135,173 @@ export const Staff: React.FC = () => {
     });
   };
 
-  const filteredStaffs = staffs.filter(staff => {
-    if (searchText) {
-      const searchLower = searchText.toLowerCase();
-      const matchesSearch = 
-        staff.firstName.toLowerCase().includes(searchLower) ||
-        staff.lastName.toLowerCase().includes(searchLower) ||
-        staff.email.toLowerCase().includes(searchLower);
-      if (!matchesSearch) return false;
+  const getFilteredStaffs = (status?: string) => {
+    let filtered = staffs;
+    if (status) {
+      filtered = staffs.filter(s => s.status === status);
     }
-    return true;
-  });
+    return filtered;
+  };
 
-  if (error) {
-    message.error(error);
+  // Check permission before rendering
+  if (!hasPermission(userProfile, ['view_staffs'], userProfile?.hotelId)) {
+    return (
+      <div className="flex justify-center items-center h-64">
+        <div className="text-center">
+          <Title level={3}>Không có quyền truy cập</Title>
+          <p>Bạn không có quyền xem danh sách nhân viên.</p>
+        </div>
+      </div>
+    );
   }
 
   return (
     <div className="space-y-6">
       <div className="flex justify-between items-center">
         <Title level={2}>Quản lý nhân viên</Title>
-        <Button
-          type="primary"
-          icon={<PlusOutlined />}
-          onClick={() => {
-            setSelectedStaff(null);
-            setShowForm(true);
-          }}
-          disabled={!hasPermission(userProfile, ['create_staff'], userProfile?.hotelId)}
-        >
-          Thêm nhân viên
-        </Button>
+        <Space>
+          <Button
+            icon={viewMode === 'grid' ? <UnorderedListOutlined /> : <AppstoreOutlined />}
+            onClick={() => setViewMode(viewMode === 'grid' ? 'list' : 'grid')}
+          >
+            {viewMode === 'grid' ? 'Danh sách' : 'Lưới'}
+          </Button>
+          <Button
+            type="primary"
+            icon={<PlusOutlined />}
+            onClick={() => {
+              setSelectedStaff(null);
+              setShowForm(true);
+            }}
+            disabled={!hasPermission(userProfile, ['create_staff'], userProfile?.hotelId)}
+          >
+            Thêm nhân viên
+          </Button>
+        </Space>
       </div>
 
-      {/* Filters */}
-      <div className="bg-white p-4 rounded-lg space-y-4">
-        <div className="flex gap-4 items-center">
-          <Input
-            placeholder="Tìm kiếm nhân viên..."
-            prefix={<SearchOutlined />}
-            value={searchText}
-            onChange={(e) => handleSearch(e.target.value)}
-            className="max-w-xs"
-          />
-          <Select
-            placeholder="Vị trí"
-            allowClear
-            onChange={(value) => handleFilterChange('position', value)}
-            className="min-w-32"
-          >
-            <Select.Option value="manager">Quản lý</Select.Option>
-            <Select.Option value="receptionist">Lễ tân</Select.Option>
-            <Select.Option value="housekeeper">Buồng phòng</Select.Option>
-            <Select.Option value="maintenance">Kỹ thuật</Select.Option>
-            <Select.Option value="accounting">Kế toán</Select.Option>
-          </Select>
-          <Select
-            placeholder="Trạng thái"
-            allowClear
-            onChange={(value) => handleFilterChange('status', value)}
-            className="min-w-32"
-          >
-            <Select.Option value="active">Hoạt động</Select.Option>
-            <Select.Option value="inactive">Tạm nghỉ</Select.Option>
-            <Select.Option value="terminated">Đã nghỉ</Select.Option>
-          </Select>
-        </div>
+      <StaffFilterComponent 
+        filter={filter}
+        onFilterChange={setFilter}
+      />
 
-        {/* Bulk Operations */}
-        {selectedStaffs.length > 0 && hasPermission(userProfile, ['update_staff'], userProfile?.hotelId) && (
-          <div className="flex items-center gap-2 p-3 bg-blue-50 border border-blue-200 rounded-lg">
-            <span className="text-blue-700">
-              Đã chọn {selectedStaffs.length} nhân viên
-            </span>
-            <Button size="small" onClick={handleBulkStatusUpdate}>
-              Cập nhật trạng thái
-            </Button>
-            <Button size="small" onClick={clearSelection}>
-              Bỏ chọn
-            </Button>
-          </div>
-        )}
-      </div>
-
-      {/* Staff List */}
-      <div className="bg-white p-4 rounded-lg">
-        <div className="flex justify-between items-center mb-4">
-          <div className="flex items-center gap-4">
-            <Checkbox
-              checked={selectedStaffs.length === filteredStaffs.length && filteredStaffs.length > 0}
-              indeterminate={selectedStaffs.length > 0 && selectedStaffs.length < filteredStaffs.length}
-              onChange={(e) => {
-                if (e.target.checked) {
-                  filteredStaffs.forEach(staff => {
-                    if (!selectedStaffs.includes(staff.id!)) {
-                      toggleStaffSelection(staff.id!);
+      <Tabs
+        activeKey={tabKey}
+        onChange={setTabKey}
+        items={[
+          {
+            key: 'all',
+            label: `Tất cả (${staffs.length})`,
+            children: viewMode === 'grid' ? (
+              <StaffGridView 
+                staffs={getFilteredStaffs()}
+                loading={loading}
+                selectedStaffs={selectedStaffs}
+                onEdit={handleEditStaff}
+                onDelete={handleDeleteStaff}
+                onView={handleViewStaff}
+                onToggleSelection={toggleStaffSelection}
+                clearSelection={clearSelection}
+                error={error}
+              />
+            ) : (
+              <StaffList
+                staffs={getFilteredStaffs()}
+                loading={loading}
+                selectedStaffs={selectedStaffs}
+                onEdit={handleEditStaff}
+                onDelete={handleDeleteStaff}
+                onSelectChange={(ids) => {
+                  ids.forEach(id => {
+                    if (!selectedStaffs.includes(id)) {
+                      toggleStaffSelection(id);
                     }
                   });
-                } else {
-                  clearSelection();
-                }
-              }}
-            >
-              Chọn tất cả
-            </Checkbox>
-            <span className="text-gray-600">
-              Hiển thị {filteredStaffs.length} / {staffs.length} nhân viên
-            </span>
-          </div>
-        </div>
-
-        {loading ? (
-          <div className="flex justify-center py-8">
-            <Spin size="large" tip="Đang tải danh sách nhân viên..." />
-          </div>
-        ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-            {filteredStaffs.map(staff => (
-              <div key={staff.id} className="relative">
-                <Checkbox
-                  className="absolute top-2 left-2 z-10"
-                  checked={selectedStaffs.includes(staff.id!)}
-                  onChange={() => toggleStaffSelection(staff.id!)}
-                />
-                <StaffCard
-                  staff={staff}
-                  onEdit={handleEditStaff}
-                  onDelete={handleDeleteStaff}
-                  onView={handleViewStaff}
-                />
-              </div>
-            ))}
-          </div>
-        )}
-
-        {!loading && filteredStaffs.length === 0 && (
-          <div className="text-center py-8 text-gray-500">
-            {staffs.length === 0 ? 'Chưa có nhân viên nào' : 'Không tìm thấy nhân viên phù hợp'}
-          </div>
-        )}
-
-        {hasMore && (
-          <div className="text-center mt-4">
-            <Button 
-              onClick={() => loadMoreStaffs(userProfile!.hotelId)}
-              loading={loading}
-            >
-              Tải thêm
-            </Button>
-          </div>
-        )}
-      </div>
+                  selectedStaffs.forEach(id => {
+                    if (!ids.includes(id)) {
+                      toggleStaffSelection(id);
+                    }
+                  });
+                }}
+              />
+            )
+          },
+          {
+            key: 'active',
+            label: `Hoạt động (${staffs.filter(s => s.status === 'active').length})`,
+            children: viewMode === 'grid' ? (
+              <StaffGridView 
+                staffs={getFilteredStaffs('active')}
+                loading={loading}
+                selectedStaffs={selectedStaffs}
+                onEdit={handleEditStaff}
+                onDelete={handleDeleteStaff}
+                onView={handleViewStaff}
+                onToggleSelection={toggleStaffSelection}
+                clearSelection={clearSelection}
+                error={error}
+              />
+            ) : (
+              <StaffList
+                staffs={getFilteredStaffs('active')}
+                loading={loading}
+                selectedStaffs={selectedStaffs}
+                onEdit={handleEditStaff}
+                onDelete={handleDeleteStaff}
+                onSelectChange={(ids) => {
+                  ids.forEach(id => {
+                    if (!selectedStaffs.includes(id)) {
+                      toggleStaffSelection(id);
+                    }
+                  });
+                  selectedStaffs.forEach(id => {
+                    if (!ids.includes(id)) {
+                      toggleStaffSelection(id);
+                    }
+                  });
+                }}
+              />
+            )
+          },
+          {
+            key: 'inactive',
+            label: `Tạm nghỉ (${staffs.filter(s => s.status === 'inactive').length})`,
+            children: viewMode === 'grid' ? (
+              <StaffGridView 
+                staffs={getFilteredStaffs('inactive')}
+                loading={loading}
+                selectedStaffs={selectedStaffs}
+                onEdit={handleEditStaff}
+                onDelete={handleDeleteStaff}
+                onView={handleViewStaff}
+                onToggleSelection={toggleStaffSelection}
+                clearSelection={clearSelection}
+                error={error}
+              />
+            ) : (
+              <StaffList
+                staffs={getFilteredStaffs('inactive')}
+                loading={loading}
+                selectedStaffs={selectedStaffs}
+                onEdit={handleEditStaff}
+                onDelete={handleDeleteStaff}
+                onSelectChange={(ids) => {
+                  ids.forEach(id => {
+                    if (!selectedStaffs.includes(id)) {
+                      toggleStaffSelection(id);
+                    }
+                  });
+                  selectedStaffs.forEach(id => {
+                    if (!ids.includes(id)) {
+                      toggleStaffSelection(id);
+                    }
+                  });
+                }}
+              />
+            )
+          }
+        ]}
+      />
 
       <StaffForm
         visible={showForm}
@@ -304,6 +313,66 @@ export const Staff: React.FC = () => {
         onSubmit={selectedStaff ? handleUpdateStaff : handleCreateStaff}
         loading={loading}
       />
+    </div>
+  );
+};
+
+// Helper component for grid view
+interface StaffGridViewProps {
+  staffs: StaffType[];
+  loading: boolean;
+  selectedStaffs: string[];
+  onEdit: (staff: StaffType) => void;
+  onDelete: (staffId: string) => void;
+  onView: (staff: StaffType) => void;
+  onToggleSelection: (staffId: string) => void;
+  clearSelection: () => void;
+  error: string | null;
+}
+
+const StaffGridView: React.FC<StaffGridViewProps> = ({
+  staffs,
+  loading,
+  selectedStaffs,
+  onEdit,
+  onDelete,
+  onView,
+  onToggleSelection,
+  clearSelection,
+  error
+}) => {
+  return (
+    <div className="bg-white p-4 rounded-lg">
+      {error && (
+        <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded text-red-700">
+          Lỗi: {error}
+        </div>
+      )}
+
+      {loading ? (
+        <div className="flex justify-center py-8">
+          <Spin size="large" tip="Đang tải danh sách nhân viên..." />
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+          {staffs.map(staff => (
+            <div key={staff.id} className="relative">
+              <StaffCard
+                staff={staff}
+                onEdit={onEdit}
+                onDelete={onDelete}
+                onView={onView}
+              />
+            </div>
+          ))}
+        </div>
+      )}
+
+      {!loading && staffs.length === 0 && (
+        <div className="text-center py-8 text-gray-500">
+          Chưa có nhân viên nào
+        </div>
+      )}
     </div>
   );
 };

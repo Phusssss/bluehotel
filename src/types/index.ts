@@ -4,3 +4,4 @@ export * from './guest';
 export * from './reservation';
 export * from './invoice';
 export * from './staff';
+export * from './dashboard';
