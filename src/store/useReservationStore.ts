@@ -3,59 +3,43 @@ import type { Reservation, ReservationFilter } from '../types';
 import { reservationService } from '../services/reservationService';
 
 interface ReservationState {
-  reservations: Reservation[];
+  reservations: any[];
   loading: boolean;
   error: string | null;
   filter: ReservationFilter;
-  selectedReservation: Reservation | null;
+  selectedReservation: any | null;
   availableRooms: any[];
   
-  // ✨ Enhanced state
-  operationStatus: {
-    [reservationId: string]: {
-      checkingIn: boolean;
-      checkingOut: boolean;
-      modifying: boolean;
-      error?: string;
-    };
-  };
-  
   // Actions
-  setReservations: (reservations: Reservation[]) => void;
+  setReservations: (reservations: any[]) => void;
   setLoading: (loading: boolean) => void;
   setError: (error: string | null) => void;
   setFilter: (filter: ReservationFilter) => void;
-  setSelectedReservation: (reservation: Reservation | null) => void;
+  setSelectedReservation: (reservation: any | null) => void;
   setAvailableRooms: (rooms: any[]) => void;
-  setOperationStatus: (reservationId: string, status: any) => void;
   
   // Async actions
-  fetchReservations: (hotelId: string) => Promise<void>;
-  createReservation: (reservationData: Omit<Reservation, 'id'>) => Promise<void>;
-  updateReservation: (reservationId: string, reservationData: Partial<Reservation>) => Promise<void>;
-  deleteReservation: (reservationId: string) => Promise<void>;
+  fetchReservations: (filter?: ReservationFilter) => Promise<void>;
+  createReservation: (reservationData: any) => Promise<void>;
+  updateReservation: (reservationId: number, reservationData: any) => Promise<void>;
+  deleteReservation: (reservationId: number) => Promise<void>;
   
-  // ✨ New enhanced actions
-  fetchAvailableRooms: (hotelId: string, checkIn: string, checkOut: string, numberOfGuests: number) => Promise<void>;
-  checkInReservation: (reservationId: string, checkInData: any) => Promise<void>;
-  checkOutReservation: (reservationId: string, checkOutData: any) => Promise<void>;
-  checkAvailability: (hotelId: string, roomId: string, checkIn: string, checkOut: string, excludeId?: string) => Promise<{available: boolean; conflicts: any[]}>;
+  // Enhanced actions
+  fetchAvailableRooms: (checkIn: string, checkOut: string, numberOfGuests: number) => Promise<void>;
+  checkInReservation: (reservationId: number, checkInData?: any) => Promise<void>;
+  checkOutReservation: (reservationId: number, checkOutData?: any) => Promise<void>;
+  cancelReservation: (reservationId: number, reason?: string) => Promise<void>;
+  checkAvailability: (roomId: number, checkIn: string, checkOut: string, excludeId?: number) => Promise<{available: boolean; conflicts: any[]}>;
   
-  // ✨ NEW: Priority 2 actions
-  bulkUpdate: (reservationIds: string[], updates: Partial<Reservation>) => Promise<void>;
-  bulkDelete: (reservationIds: string[]) => Promise<void>;
-  fetchReservationsAdvanced: (hotelId: string, filters: any) => Promise<void>;
-  moveReservation: (reservationId: string, newRoomId: string, newDates?: { checkInDate: string; checkOutDate: string }) => Promise<void>;
+  // Bulk operations
+  bulkUpdate: (reservationIds: number[], updates: any) => Promise<void>;
+  bulkDelete: (reservationIds: number[]) => Promise<void>;
+  moveReservation: (reservationId: number, newRoomId: number, newDates?: { checkInDate: string; checkOutDate: string }) => Promise<void>;
   
-  // ✨ NEW: Priority 3 actions
-  modifyReservationWithHistory: (reservationId: string, changes: Partial<Reservation>, reason?: string) => Promise<void>;
-  getModificationHistory: (reservationId: string) => Promise<any[]>;
+  // Export and analytics
   exportReservations: (format: 'csv' | 'excel' | 'pdf', filters?: any) => Promise<Blob>;
-  
-  // ✨ NEW: Priority 4 actions
-  fetchReservationsPaginated: (hotelId: string, page?: number, pageSize?: number) => Promise<void>;
-  detectConflicts: (hotelId: string) => Promise<any[]>;
-  calculateOccupancy: (hotelId: string, startDate: string, endDate: string) => Promise<any>;
+  detectConflicts: () => Promise<any>;
+  calculateOccupancy: (startDate: string, endDate: string) => Promise<any>;
 }
 
 export const useReservationStore = create<ReservationState>((set, get) => ({
@@ -65,7 +49,6 @@ export const useReservationStore = create<ReservationState>((set, get) => ({
   filter: {},
   selectedReservation: null,
   availableRooms: [],
-  operationStatus: {},
   
   setReservations: (reservations) => set({ reservations }),
   setLoading: (loading) => set({ loading }),
@@ -73,17 +56,11 @@ export const useReservationStore = create<ReservationState>((set, get) => ({
   setFilter: (filter) => set({ filter }),
   setSelectedReservation: (selectedReservation) => set({ selectedReservation }),
   setAvailableRooms: (availableRooms) => set({ availableRooms }),
-  setOperationStatus: (reservationId, status) => set(state => ({
-    operationStatus: {
-      ...state.operationStatus,
-      [reservationId]: { ...state.operationStatus[reservationId], ...status }
-    }
-  })),
   
-  fetchReservations: async (hotelId: string) => {
+  fetchReservations: async (filter?: ReservationFilter) => {
     set({ loading: true, error: null });
     try {
-      const reservations = await reservationService.getReservations(hotelId, get().filter);
+      const reservations = await reservationService.getReservations(filter);
       set({ reservations, loading: false });
     } catch (error: any) {
       set({ error: error.message, loading: false });
@@ -93,37 +70,31 @@ export const useReservationStore = create<ReservationState>((set, get) => ({
   createReservation: async (reservationData) => {
     set({ loading: true, error: null });
     try {
-      // Add enhanced fields
-      const enhancedData = {
-        ...reservationData,
-        source: 'online' as const,
-        confirmationCode: Math.random().toString(36).substr(2, 8).toUpperCase(),
-        paymentStatus: 'pending' as const,
-        createdAt: new Date(),
-        updatedAt: new Date(),
-      };
-      await reservationService.createReservation(enhancedData);
-      await get().fetchReservations(reservationData.hotelId);
+      const newReservation = await reservationService.createReservation(reservationData);
+      const { reservations } = get();
+      set({ reservations: [...reservations, newReservation], loading: false });
     } catch (error: any) {
       set({ error: error.message, loading: false });
+      throw error;
     }
   },
   
-  updateReservation: async (reservationId: string, reservationData) => {
+  updateReservation: async (reservationId: number, reservationData) => {
     set({ loading: true, error: null });
     try {
-      await reservationService.updateReservation(reservationId, reservationData);
+      const updatedReservation = await reservationService.updateReservation(reservationId, reservationData);
       const { reservations } = get();
       const updatedReservations = reservations.map(reservation => 
-        reservation.id === reservationId ? { ...reservation, ...reservationData } : reservation
+        reservation.id === reservationId ? updatedReservation : reservation
       );
       set({ reservations: updatedReservations, loading: false });
     } catch (error: any) {
       set({ error: error.message, loading: false });
+      throw error;
     }
   },
   
-  deleteReservation: async (reservationId: string) => {
+  deleteReservation: async (reservationId: number) => {
     set({ loading: true, error: null });
     try {
       await reservationService.deleteReservation(reservationId);
@@ -132,141 +103,119 @@ export const useReservationStore = create<ReservationState>((set, get) => ({
       set({ reservations: filteredReservations, loading: false });
     } catch (error: any) {
       set({ error: error.message, loading: false });
+      throw error;
     }
   },
   
-  // ✨ Enhanced actions
-  fetchAvailableRooms: async (hotelId: string, checkIn: string, checkOut: string, numberOfGuests: number) => {
+  // Enhanced actions
+  fetchAvailableRooms: async (checkIn: string, checkOut: string, numberOfGuests: number) => {
     set({ loading: true, error: null });
     try {
-      const availableRooms = await reservationService.getAvailableRooms(hotelId, checkIn, checkOut, numberOfGuests);
+      const availableRooms = await reservationService.getAvailableRooms(checkIn, checkOut, numberOfGuests);
       set({ availableRooms, loading: false });
     } catch (error: any) {
       set({ error: error.message, loading: false });
     }
   },
   
-  checkInReservation: async (reservationId: string, checkInData: any) => {
-    get().setOperationStatus(reservationId, { checkingIn: true });
+  checkInReservation: async (reservationId: number, checkInData?: any) => {
+    set({ loading: true, error: null });
     try {
-      await reservationService.checkIn(reservationId, checkInData);
-      await get().fetchReservations(get().reservations[0]?.hotelId || '');
-      get().setOperationStatus(reservationId, { checkingIn: false });
+      const updatedReservation = await reservationService.checkIn(reservationId, checkInData);
+      const { reservations } = get();
+      const updatedReservations = reservations.map(reservation => 
+        reservation.id === reservationId ? updatedReservation : reservation
+      );
+      set({ reservations: updatedReservations, loading: false });
     } catch (error: any) {
-      get().setOperationStatus(reservationId, { checkingIn: false, error: error.message });
+      set({ error: error.message, loading: false });
       throw error;
     }
   },
   
-  checkOutReservation: async (reservationId: string, checkOutData: any) => {
-    get().setOperationStatus(reservationId, { checkingOut: true });
+  checkOutReservation: async (reservationId: number, checkOutData?: any) => {
+    set({ loading: true, error: null });
     try {
-      await reservationService.checkOut(reservationId, checkOutData);
-      await get().fetchReservations(get().reservations[0]?.hotelId || '');
-      get().setOperationStatus(reservationId, { checkingOut: false });
+      const updatedReservation = await reservationService.checkOut(reservationId, checkOutData);
+      const { reservations } = get();
+      const updatedReservations = reservations.map(reservation => 
+        reservation.id === reservationId ? updatedReservation : reservation
+      );
+      set({ reservations: updatedReservations, loading: false });
     } catch (error: any) {
-      get().setOperationStatus(reservationId, { checkingOut: false, error: error.message });
+      set({ error: error.message, loading: false });
       throw error;
     }
   },
   
-  checkAvailability: async (hotelId: string, roomId: string, checkIn: string, checkOut: string, excludeId?: string) => {
+  cancelReservation: async (reservationId: number, reason?: string) => {
+    set({ loading: true, error: null });
     try {
-      return await reservationService.checkAvailability(hotelId, roomId, checkIn, checkOut, excludeId);
+      const updatedReservation = await reservationService.cancelReservation(reservationId, reason);
+      const { reservations } = get();
+      const updatedReservations = reservations.map(reservation => 
+        reservation.id === reservationId ? updatedReservation : reservation
+      );
+      set({ reservations: updatedReservations, loading: false });
+    } catch (error: any) {
+      set({ error: error.message, loading: false });
+      throw error;
+    }
+  },
+  
+  checkAvailability: async (roomId: number, checkIn: string, checkOut: string, excludeId?: number) => {
+    try {
+      return await reservationService.checkAvailability(roomId, checkIn, checkOut, excludeId);
     } catch (error: any) {
       set({ error: error.message });
       throw error;
     }
   },
 
-  // ✨ NEW: Bulk operations
-  bulkUpdate: async (reservationIds: string[], updates: Partial<Reservation>) => {
+  // Bulk operations
+  bulkUpdate: async (reservationIds: number[], updates: any) => {
     set({ loading: true, error: null });
     try {
       await reservationService.bulkUpdateReservations(reservationIds, updates);
-      const hotelId = get().reservations[0]?.hotelId;
-      if (hotelId) {
-        await get().fetchReservations(hotelId);
-      }
+      await get().fetchReservations();
     } catch (error: any) {
       set({ error: error.message, loading: false });
       throw error;
     }
   },
 
-  bulkDelete: async (reservationIds: string[]) => {
+  bulkDelete: async (reservationIds: number[]) => {
     set({ loading: true, error: null });
     try {
       await reservationService.bulkDeleteReservations(reservationIds);
-      const hotelId = get().reservations[0]?.hotelId;
-      if (hotelId) {
-        await get().fetchReservations(hotelId);
-      }
+      await get().fetchReservations();
     } catch (error: any) {
       set({ error: error.message, loading: false });
       throw error;
     }
   },
 
-  // ✨ NEW: Advanced filtering
-  fetchReservationsAdvanced: async (hotelId: string, filters: any) => {
+  // Move reservation (for drag-drop)
+  moveReservation: async (reservationId: number, newRoomId: number, newDates?: { checkInDate: string; checkOutDate: string }) => {
     set({ loading: true, error: null });
     try {
-      const reservations = await reservationService.getReservationsAdvanced(hotelId, filters);
-      set({ reservations, loading: false });
+      const updatedReservation = await reservationService.moveReservation(reservationId, newRoomId, newDates);
+      const { reservations } = get();
+      const updatedReservations = reservations.map(reservation => 
+        reservation.id === reservationId ? updatedReservation : reservation
+      );
+      set({ reservations: updatedReservations, loading: false });
     } catch (error: any) {
       set({ error: error.message, loading: false });
-    }
-  },
-
-  // ✨ NEW: Move reservation (for drag-drop)
-  moveReservation: async (reservationId: string, newRoomId: string, newDates?: { checkInDate: string; checkOutDate: string }) => {
-    get().setOperationStatus(reservationId, { modifying: true });
-    try {
-      await reservationService.moveReservation(reservationId, newRoomId, newDates);
-      const hotelId = get().reservations[0]?.hotelId;
-      if (hotelId) {
-        await get().fetchReservations(hotelId);
-      }
-      get().setOperationStatus(reservationId, { modifying: false });
-    } catch (error: any) {
-      get().setOperationStatus(reservationId, { modifying: false, error: error.message });
       throw error;
     }
   },
 
-  // ✨ NEW: Priority 3 - Modification with history
-  modifyReservationWithHistory: async (reservationId: string, changes: Partial<Reservation>, reason?: string) => {
-    get().setOperationStatus(reservationId, { modifying: true });
-    try {
-      await reservationService.modifyReservation(reservationId, changes, reason, 'current-user');
-      const hotelId = get().reservations[0]?.hotelId;
-      if (hotelId) {
-        await get().fetchReservations(hotelId);
-      }
-      get().setOperationStatus(reservationId, { modifying: false });
-    } catch (error: any) {
-      get().setOperationStatus(reservationId, { modifying: false, error: error.message });
-      throw error;
-    }
-  },
-
-  // ✨ NEW: Get modification history
-  getModificationHistory: async (reservationId: string) => {
-    try {
-      return await reservationService.getModificationHistory(reservationId);
-    } catch (error: any) {
-      set({ error: error.message });
-      throw error;
-    }
-  },
-
-  // ✨ NEW: Export reservations
+  // Export reservations
   exportReservations: async (format: 'csv' | 'excel' | 'pdf', filters?: any) => {
     set({ loading: true });
     try {
-      const hotelId = get().reservations[0]?.hotelId || 'hotel-1';
-      return await reservationService.exportReservations(hotelId, filters || {}, format);
+      return await reservationService.exportReservations(filters || {}, format);
     } catch (error: any) {
       set({ error: error.message });
       throw error;
@@ -275,39 +224,20 @@ export const useReservationStore = create<ReservationState>((set, get) => ({
     }
   },
 
-  // ✨ NEW: Priority 4 - Performance optimization
-  fetchReservationsPaginated: async (hotelId: string, page: number = 1, pageSize: number = 10) => {
-    set({ loading: true, error: null });
+  // Detect conflicts
+  detectConflicts: async () => {
     try {
-      // Simulate pagination - in real app, this would be server-side
-      const allReservations = await reservationService.getReservations(hotelId);
-      const startIndex = (page - 1) * pageSize;
-      const paginatedReservations = allReservations.slice(startIndex, startIndex + pageSize);
-      
-      set({ 
-        reservations: paginatedReservations,
-        loading: false,
-        filter: { ...get().filter, pageNo: page, pageSize }
-      });
-    } catch (error: any) {
-      set({ error: error.message, loading: false });
-    }
-  },
-
-  // ✨ NEW: Detect conflicts
-  detectConflicts: async (hotelId: string) => {
-    try {
-      return await reservationService.detectConflicts(hotelId);
+      return await reservationService.detectConflicts();
     } catch (error: any) {
       set({ error: error.message });
       throw error;
     }
   },
 
-  // ✨ NEW: Calculate occupancy
-  calculateOccupancy: async (hotelId: string, startDate: string, endDate: string) => {
+  // Calculate occupancy
+  calculateOccupancy: async (startDate: string, endDate: string) => {
     try {
-      return await reservationService.calculateOccupancy(hotelId, startDate, endDate);
+      return await reservationService.calculateOccupancy(startDate, endDate);
     } catch (error: any) {
       set({ error: error.message });
       throw error;

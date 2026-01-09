@@ -1,36 +1,34 @@
 import { create } from 'zustand';
 import type { Room, RoomFilter, RoomStatus } from '../types';
 import { roomService } from '../services/roomService';
-import type { DocumentSnapshot } from 'firebase/firestore';
 
 interface RoomState {
-  rooms: Room[];
+  rooms: any[];
   loading: boolean;
   error: string | null;
   filter: RoomFilter;
-  selectedRoom: Room | null;
-  selectedRooms: string[];
-  hasMore: boolean;
-  lastDoc: DocumentSnapshot | null;
+  selectedRoom: any | null;
+  selectedRooms: number[];
   
   // Actions
-  setRooms: (rooms: Room[]) => void;
+  setRooms: (rooms: any[]) => void;
   setLoading: (loading: boolean) => void;
   setError: (error: string | null) => void;
   setFilter: (filter: RoomFilter) => void;
-  setSelectedRoom: (room: Room | null) => void;
-  setSelectedRooms: (roomIds: string[]) => void;
-  toggleRoomSelection: (roomId: string) => void;
+  setSelectedRoom: (room: any | null) => void;
+  setSelectedRooms: (roomIds: number[]) => void;
+  toggleRoomSelection: (roomId: number) => void;
   clearSelection: () => void;
   
   // Async actions
-  fetchRooms: (hotelId: string, reset?: boolean) => Promise<void>;
-  loadMoreRooms: (hotelId: string) => Promise<void>;
-  createRoom: (roomData: Omit<Room, 'id'>) => Promise<void>;
-  updateRoom: (roomId: string, roomData: Partial<Room>) => Promise<void>;
-  deleteRoom: (roomId: string, force?: boolean) => Promise<void>;
-  bulkUpdateStatus: (roomIds: string[], status: RoomStatus) => Promise<void>;
-  bulkDelete: (roomIds: string[], force?: boolean) => Promise<void>;
+  fetchRooms: (filter?: RoomFilter) => Promise<void>;
+  createRoom: (roomData: any) => Promise<void>;
+  updateRoom: (roomId: number, roomData: any) => Promise<void>;
+  deleteRoom: (roomId: number) => Promise<void>;
+  updateRoomStatus: (roomId: number, status: string) => Promise<void>;
+  bulkUpdateStatus: (roomIds: number[], status: string) => Promise<void>;
+  bulkDelete: (roomIds: number[]) => Promise<void>;
+  fetchRoomTypes: () => Promise<any[]>;
 }
 
 export const useRoomStore = create<RoomState>((set, get) => ({
@@ -40,8 +38,6 @@ export const useRoomStore = create<RoomState>((set, get) => ({
   filter: {},
   selectedRoom: null,
   selectedRooms: [],
-  hasMore: true,
-  lastDoc: null,
   
   setRooms: (rooms) => set({ rooms }),
   setLoading: (loading) => set({ loading }),
@@ -58,99 +54,109 @@ export const useRoomStore = create<RoomState>((set, get) => ({
   },
   clearSelection: () => set({ selectedRooms: [] }),
   
-  fetchRooms: async (hotelId: string, reset = true) => {
+  fetchRooms: async (filter?: RoomFilter) => {
     set({ loading: true, error: null });
-    if (reset) set({ rooms: [], lastDoc: null, hasMore: true });
-    
     try {
-      const { filter, lastDoc } = get();
-      const { rooms, lastDoc: newLastDoc } = await roomService.getRooms(hotelId, {
-        ...filter,
-        limit: 20,
-        startAfter: reset ? undefined : lastDoc || undefined
-      });
-      
-      const currentRooms = reset ? [] : get().rooms;
-      set({ 
-        rooms: [...currentRooms, ...rooms],
-        lastDoc: newLastDoc,
-        loading: false,
-        hasMore: rooms.length === 20
-      });
+      const rooms = await roomService.getRooms(filter);
+      set({ rooms, loading: false });
     } catch (error: any) {
       set({ error: error.message, loading: false });
     }
-  },
-  
-  loadMoreRooms: async (hotelId: string) => {
-    const { hasMore, loading } = get();
-    if (!hasMore || loading) return;
-    await get().fetchRooms(hotelId, false);
   },
   
   createRoom: async (roomData) => {
     set({ loading: true, error: null });
     try {
-      await roomService.createRoom(roomData);
-      await get().fetchRooms(roomData.hotelId);
+      const newRoom = await roomService.createRoom(roomData);
+      const { rooms } = get();
+      set({ rooms: [...rooms, newRoom], loading: false });
     } catch (error: any) {
       set({ error: error.message, loading: false });
+      throw error;
     }
   },
   
-  updateRoom: async (roomId: string, roomData) => {
+  updateRoom: async (roomId: number, roomData) => {
     set({ loading: true, error: null });
     try {
-      await roomService.updateRoom(roomId, roomData);
+      const updatedRoom = await roomService.updateRoom(roomId, roomData);
       const { rooms } = get();
       const updatedRooms = rooms.map(room => 
-        room.id === roomId ? { ...room, ...roomData } : room
+        room.id === roomId ? updatedRoom : room
       );
       set({ rooms: updatedRooms, loading: false });
     } catch (error: any) {
       set({ error: error.message, loading: false });
+      throw error;
     }
   },
   
-  deleteRoom: async (roomId: string, force = false) => {
+  updateRoomStatus: async (roomId: number, status: string) => {
     set({ loading: true, error: null });
     try {
-      await roomService.deleteRoom(roomId, force);
+      const updatedRoom = await roomService.updateRoomStatus(roomId, status);
+      const { rooms } = get();
+      const updatedRooms = rooms.map(room => 
+        room.id === roomId ? updatedRoom : room
+      );
+      set({ rooms: updatedRooms, loading: false });
+    } catch (error: any) {
+      set({ error: error.message, loading: false });
+      throw error;
+    }
+  },
+  
+  deleteRoom: async (roomId: number) => {
+    set({ loading: true, error: null });
+    try {
+      await roomService.deleteRoom(roomId);
       const { rooms } = get();
       const filteredRooms = rooms.filter(room => room.id !== roomId);
       set({ rooms: filteredRooms, loading: false });
     } catch (error: any) {
       set({ error: error.message, loading: false });
+      throw error;
     }
   },
   
-  bulkUpdateStatus: async (roomIds: string[], status: RoomStatus) => {
+  bulkUpdateStatus: async (roomIds: number[], status: string) => {
     set({ loading: true, error: null });
     try {
       await Promise.all(
-        roomIds.map(id => roomService.updateRoom(id, { status }))
+        roomIds.map(id => roomService.updateRoomStatus(id, status))
       );
       const { rooms } = get();
       const updatedRooms = rooms.map(room => 
-        roomIds.includes(room.id!) ? { ...room, status } : room
+        roomIds.includes(room.id) ? { ...room, status } : room
       );
       set({ rooms: updatedRooms, loading: false, selectedRooms: [] });
     } catch (error: any) {
       set({ error: error.message, loading: false });
+      throw error;
     }
   },
   
-  bulkDelete: async (roomIds: string[], force = false) => {
+  bulkDelete: async (roomIds: number[]) => {
     set({ loading: true, error: null });
     try {
       await Promise.all(
-        roomIds.map(id => roomService.deleteRoom(id, force))
+        roomIds.map(id => roomService.deleteRoom(id))
       );
       const { rooms } = get();
-      const filteredRooms = rooms.filter(room => !roomIds.includes(room.id!));
+      const filteredRooms = rooms.filter(room => !roomIds.includes(room.id));
       set({ rooms: filteredRooms, loading: false, selectedRooms: [] });
     } catch (error: any) {
       set({ error: error.message, loading: false });
+      throw error;
+    }
+  },
+  
+  fetchRoomTypes: async () => {
+    try {
+      return await roomService.getRoomTypes();
+    } catch (error: any) {
+      set({ error: error.message });
+      throw error;
     }
   },
 }));

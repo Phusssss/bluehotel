@@ -1,10 +1,8 @@
 import React, { useState } from 'react';
 import { Form, Input, Button, Card, Typography, message, Divider } from 'antd';
 import { UserOutlined, LockOutlined, SettingOutlined } from '@ant-design/icons';
-import { Link } from 'react-router-dom';
-import { authService } from '../services/authService';
-import { formatFirebaseError } from '../utils/errorUtils';
-import { useAuthStore } from '../store/useAuthStore';
+import { Link, useNavigate } from 'react-router-dom';
+import { useAuth } from '../hooks/useAuth';
 import { SetupData } from '../components/common/SetupData';
 
 const { Title, Text } = Typography;
@@ -17,19 +15,18 @@ interface LoginForm {
 export const Login: React.FC = () => {
   const [loading, setLoading] = useState(false);
   const [showSetup, setShowSetup] = useState(false);
-  const { setError } = useAuthStore();
+  const { login, error } = useAuth();
+  const navigate = useNavigate();
 
   const onFinish = async (values: LoginForm) => {
     setLoading(true);
-    setError(null);
 
     try {
-      await authService.signIn(values.email, values.password);
+      await login(values.email, values.password);
       message.success('Đăng nhập thành công!');
+      navigate('/');
     } catch (error: any) {
-      const msg = formatFirebaseError(error);
-      setError(msg);
-      message.error(msg);
+      message.error(error.message || 'Đăng nhập thất bại');
     } finally {
       setLoading(false);
     }
@@ -48,11 +45,21 @@ export const Login: React.FC = () => {
           <Text type="secondary">Đăng nhập để tiếp tục</Text>
         </div>
 
+        {error && (
+          <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded text-red-600 text-sm">
+            {error}
+          </div>
+        )}
+
         <Form
           name="login"
           onFinish={onFinish}
           layout="vertical"
           size="large"
+          initialValues={{
+            email: 'admin@hotel.com',
+            password: 'admin123'
+          }}
         >
           <Form.Item
             name="email"
@@ -104,7 +111,7 @@ export const Login: React.FC = () => {
 
         <div className="text-center text-sm text-gray-500 mt-4">
           <Text type="secondary">
-            Demo: admin@hotel.com / password123
+            Demo: admin@hotel.com / admin123
           </Text>
           <div className="mt-2">
             <Link to="/forgot-password" className="text-blue-600 hover:text-blue-800">

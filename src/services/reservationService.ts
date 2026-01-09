@@ -1,616 +1,310 @@
-import { 
-  collection, 
-  doc, 
-  getDocs, 
-  getDoc, 
-  addDoc, 
-  updateDoc, 
-  deleteDoc, 
-  query, 
-  where, 
-  orderBy 
-} from 'firebase/firestore';
-import { db } from '../config/firebaseConfig';
+import { apiClient } from './api';
 import type { Reservation, ReservationFilter } from '../types';
 
-const COLLECTION_NAME = 'reservations';
+interface CreateReservationDto {
+  guest_id: number;
+  room_id: number;
+  check_in_date: string;
+  check_out_date: string;
+  number_of_guests: number;
+  special_requests?: string;
+  booking_reference?: string;
+}
+
+interface UpdateReservationDto {
+  guest_id?: number;
+  room_id?: number;
+  check_in_date?: string;
+  check_out_date?: string;
+  number_of_guests?: number;
+  special_requests?: string;
+  status?: 'pending' | 'confirmed' | 'checked_in' | 'checked_out' | 'cancelled';
+}
+
+interface ReservationResponse {
+  id: number;
+  guest_id: number;
+  room_id: number;
+  check_in_date: string;
+  check_out_date: string;
+  number_of_guests: number;
+  status: string;
+  total_amount: number;
+  special_requests?: string;
+  booking_reference: string;
+  guest?: {
+    id: number;
+    name: string;
+    email: string;
+    phone: string;
+  };
+  room?: {
+    id: number;
+    room_number: string;
+    room_type: {
+      name: string;
+      base_price: number;
+    };
+  };
+  created_at: string;
+  updated_at: string;
+}
 
 export const reservationService = {
   // Get all reservations
-  async getReservations(hotelId: string, filter?: ReservationFilter): Promise<Reservation[]> {
+  async getReservations(filter?: ReservationFilter): Promise<ReservationResponse[]> {
     try {
-      let q = query(
-        collection(db, COLLECTION_NAME),
-        where('hotelId', '==', hotelId)
-      );
-
-      if (filter?.status) {
-        q = query(
-          collection(db, COLLECTION_NAME),
-          where('hotelId', '==', hotelId),
-          where('status', '==', filter.status)
-        );
-      }
-
-      const querySnapshot = await getDocs(q);
-      const reservations = querySnapshot.docs.map(doc => ({
-        id: doc.id,
-        ...doc.data()
-      } as Reservation));
+      const params: any = {};
       
-      return reservations.sort((a, b) => 
-        new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
-      );
-    } catch (error) {
+      if (filter?.status) params.status = filter.status;
+      if (filter?.dateRange) {
+        params.start_date = filter.dateRange.start;
+        params.end_date = filter.dateRange.end;
+      }
+      if (filter?.roomId) params.room_id = filter.roomId;
+      if (filter?.guestId) params.guest_id = filter.guestId;
+
+      const response = await apiClient.get<ReservationResponse[]>('/reservations', { params });
+      return response;
+    } catch (error: any) {
       console.error('Error getting reservations:', error);
-      throw error;
+      throw new Error(error.response?.data?.message || 'Không thể tải danh sách đặt phòng');
     }
   },
 
-  // ✨ NEW: Check room availability
+  // Get reservation by ID
+  async getReservationById(reservationId: number): Promise<ReservationResponse> {
+    try {
+      const response = await apiClient.get<ReservationResponse>(`/reservations/${reservationId}`);
+      return response;
+    } catch (error: any) {
+      console.error('Error getting reservation:', error);
+      throw new Error(error.response?.data?.message || 'Không thể tải thông tin đặt phòng');
+    }
+  },
+
+  // Create reservation
+  async createReservation(reservationData: CreateReservationDto): Promise<ReservationResponse> {
+    try {
+      const response = await apiClient.post<ReservationResponse>('/reservations', reservationData);
+      return response;
+    } catch (error: any) {
+      console.error('Error creating reservation:', error);
+      throw new Error(error.response?.data?.message || 'Không thể tạo đặt phòng mới');
+    }
+  },
+
+  // Update reservation
+  async updateReservation(reservationId: number, reservationData: UpdateReservationDto): Promise<ReservationResponse> {
+    try {
+      const response = await apiClient.put<ReservationResponse>(`/reservations/${reservationId}`, reservationData);
+      return response;
+    } catch (error: any) {
+      console.error('Error updating reservation:', error);
+      throw new Error(error.response?.data?.message || 'Không thể cập nhật đặt phòng');
+    }
+  },
+
+  // Delete reservation
+  async deleteReservation(reservationId: number): Promise<void> {
+    try {
+      await apiClient.delete(`/reservations/${reservationId}`);
+    } catch (error: any) {
+      console.error('Error deleting reservation:', error);
+      throw new Error(error.response?.data?.message || 'Không thể xóa đặt phòng');
+    }
+  },
+
+  // Check-in process
+  async checkIn(reservationId: number, checkInData?: { notes?: string }): Promise<ReservationResponse> {
+    try {
+      const response = await apiClient.post<ReservationResponse>(`/reservations/${reservationId}/check-in`, checkInData || {});
+      return response;
+    } catch (error: any) {
+      console.error('Error checking in:', error);
+      throw new Error(error.response?.data?.message || 'Không thể check-in');
+    }
+  },
+
+  // Check-out process
+  async checkOut(reservationId: number, checkOutData?: { notes?: string }): Promise<ReservationResponse> {
+    try {
+      const response = await apiClient.post<ReservationResponse>(`/reservations/${reservationId}/check-out`, checkOutData || {});
+      return response;
+    } catch (error: any) {
+      console.error('Error checking out:', error);
+      throw new Error(error.response?.data?.message || 'Không thể check-out');
+    }
+  },
+
+  // Cancel reservation
+  async cancelReservation(reservationId: number, reason?: string): Promise<ReservationResponse> {
+    try {
+      const response = await apiClient.post<ReservationResponse>(`/reservations/${reservationId}/cancel`, { reason });
+      return response;
+    } catch (error: any) {
+      console.error('Error cancelling reservation:', error);
+      throw new Error(error.response?.data?.message || 'Không thể hủy đặt phòng');
+    }
+  },
+
+  // Check availability
   async checkAvailability(
-    hotelId: string,
-    roomId: string,
+    roomId: number,
     checkInDate: string,
     checkOutDate: string,
-    excludeReservationId?: string
-  ): Promise<{available: boolean; conflicts: Reservation[]}> {
+    excludeReservationId?: number
+  ): Promise<{ available: boolean; conflicts: ReservationResponse[] }> {
     try {
-      const q = query(
-        collection(db, COLLECTION_NAME),
-        where('hotelId', '==', hotelId),
-        where('roomId', '==', roomId)
-      );
-
-      const querySnapshot = await getDocs(q);
-      const reservations = querySnapshot.docs
-        .map(doc => ({ id: doc.id, ...doc.data() } as Reservation))
-        .filter(res => res.id !== excludeReservationId && !['cancelled'].includes(res.status));
-
-      const conflicts = reservations.filter(res => {
-        return (
-          (checkInDate >= res.checkInDate && checkInDate < res.checkOutDate) ||
-          (checkOutDate > res.checkInDate && checkOutDate <= res.checkOutDate) ||
-          (checkInDate <= res.checkInDate && checkOutDate >= res.checkOutDate)
-        );
-      });
-
-      return {
-        available: conflicts.length === 0,
-        conflicts
+      const params: any = {
+        room_id: roomId,
+        check_in: checkInDate,
+        check_out: checkOutDate,
       };
-    } catch (error) {
+      
+      if (excludeReservationId) {
+        params.exclude_reservation_id = excludeReservationId;
+      }
+
+      const response = await apiClient.get<{ available: boolean; conflicts: ReservationResponse[] }>('/reservations/check-availability', { params });
+      return response;
+    } catch (error: any) {
       console.error('Error checking availability:', error);
-      throw error;
+      throw new Error(error.response?.data?.message || 'Không thể kiểm tra tình trạng phòng');
     }
   },
 
-  // ✨ NEW: Get available rooms
+  // Get available rooms
   async getAvailableRooms(
-    hotelId: string,
     checkInDate: string,
     checkOutDate: string,
     numberOfGuests: number
   ): Promise<any[]> {
     try {
-      // Get all rooms
-      const roomsQuery = query(
-        collection(db, 'rooms'),
-        where('hotelId', '==', hotelId),
-        where('status', '==', 'available'),
-        where('maxGuests', '>=', numberOfGuests)
-      );
-      
-      const roomsSnapshot = await getDocs(roomsQuery);
-      const rooms = roomsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-
-      // Check availability for each room
-      const availableRooms = [];
-      for (const room of rooms) {
-        const { available } = await this.checkAvailability(
-          hotelId, room.id, checkInDate, checkOutDate
-        );
-        if (available) {
-          availableRooms.push({
-            room,
-            availablePrice: (room as any).basePrice,
-            isRecommended: (room as any).roomType === 'deluxe'
-          });
-        }
-      }
-
-      return availableRooms;
-    } catch (error) {
+      const response = await apiClient.get<any[]>('/rooms/available', {
+        params: {
+          check_in: checkInDate,
+          check_out: checkOutDate,
+          guests: numberOfGuests,
+        },
+      });
+      return response;
+    } catch (error: any) {
       console.error('Error getting available rooms:', error);
-      throw error;
+      throw new Error(error.response?.data?.message || 'Không thể tải danh sách phòng trống');
     }
   },
 
-  // ✨ NEW: Check-in process
-  async checkIn(
-    reservationId: string,
-    checkInData: {
-      actualCheckInTime: string;
-      notes?: string;
-      guestPreferences?: Record<string, any>;
-    }
-  ): Promise<void> {
+  // Get reservations by room
+  async getReservationsByRoom(roomId: number): Promise<ReservationResponse[]> {
     try {
-      const docRef = doc(db, COLLECTION_NAME, reservationId);
-      await updateDoc(docRef, {
-        status: 'checked-in',
-        actualCheckInTime: checkInData.actualCheckInTime,
-        guestPreferences: checkInData.guestPreferences || {},
-        notes: checkInData.notes,
-        updatedAt: new Date()
-      });
-    } catch (error) {
-      console.error('Error checking in:', error);
-      throw error;
-    }
-  },
-
-  // ✨ NEW: Check-out process
-  async checkOut(
-    reservationId: string,
-    checkOutData: {
-      actualCheckOutTime: string;
-      notes?: string;
-    }
-  ): Promise<void> {
-    try {
-      const docRef = doc(db, COLLECTION_NAME, reservationId);
-      await updateDoc(docRef, {
-        status: 'checked-out',
-        actualCheckOutTime: checkOutData.actualCheckOutTime,
-        notes: checkOutData.notes,
-        updatedAt: new Date()
-      });
-    } catch (error) {
-      console.error('Error checking out:', error);
-      throw error;
-    }
-  },
-
-  // Get reservations by room ID
-  async getReservationsByRoom(hotelId: string, roomId: string): Promise<Reservation[]> {
-    try {
-      const q = query(
-        collection(db, COLLECTION_NAME),
-        where('hotelId', '==', hotelId),
-        where('roomId', '==', roomId),
-        orderBy('checkInDate', 'desc')
-      );
-
-      const querySnapshot = await getDocs(q);
-      return querySnapshot.docs.map(doc => ({
-        id: doc.id,
-        ...doc.data()
-      } as Reservation));
-    } catch (error) {
+      const response = await apiClient.get<ReservationResponse[]>(`/rooms/${roomId}/reservations`);
+      return response;
+    } catch (error: any) {
       console.error('Error getting reservations by room:', error);
-      throw error;
-    }
-  },
-  async getReservationById(reservationId: string): Promise<Reservation | null> {
-    try {
-      const docRef = doc(db, COLLECTION_NAME, reservationId);
-      const docSnap = await getDoc(docRef);
-      
-      if (docSnap.exists()) {
-        return { id: docSnap.id, ...docSnap.data() } as Reservation;
-      }
-      return null;
-    } catch (error) {
-      console.error('Error getting reservation:', error);
-      throw error;
+      throw new Error(error.response?.data?.message || 'Không thể tải danh sách đặt phòng theo phòng');
     }
   },
 
-  // Create reservation
-  async createReservation(reservationData: Omit<Reservation, 'id'>): Promise<string> {
+  // Get reservation audit log
+  async getReservationAudit(reservationId: number): Promise<any[]> {
     try {
-      // Filter out undefined values
-      const cleanData = Object.fromEntries(
-        Object.entries(reservationData).filter(([_, value]) => value !== undefined)
-      );
-      
-      const docRef = await addDoc(collection(db, COLLECTION_NAME), {
-        ...cleanData,
-        createdAt: new Date(),
-        updatedAt: new Date()
+      const response = await apiClient.get<any[]>(`/reservations/${reservationId}/audit`);
+      return response;
+    } catch (error: any) {
+      console.error('Error getting reservation audit:', error);
+      throw new Error(error.response?.data?.message || 'Không thể tải lịch sử thay đổi');
+    }
+  },
+
+  // Bulk operations
+  async bulkUpdateReservations(reservationIds: number[], updates: UpdateReservationDto): Promise<void> {
+    try {
+      await apiClient.post('/reservations/bulk-update', {
+        reservation_ids: reservationIds,
+        updates,
       });
-      return docRef.id;
-    } catch (error) {
-      console.error('Error creating reservation:', error);
-      throw error;
-    }
-  },
-
-  // Update reservation
-  async updateReservation(reservationId: string, reservationData: Partial<Reservation>): Promise<void> {
-    try {
-      // Filter out undefined values
-      const cleanData = Object.fromEntries(
-        Object.entries(reservationData).filter(([_, value]) => value !== undefined)
-      );
-      
-      const docRef = doc(db, COLLECTION_NAME, reservationId);
-      await updateDoc(docRef, {
-        ...cleanData,
-        updatedAt: new Date()
-      });
-    } catch (error) {
-      console.error('Error updating reservation:', error);
-      throw error;
-    }
-  },
-
-  // Delete reservation
-  async deleteReservation(reservationId: string): Promise<void> {
-    try {
-      const docRef = doc(db, COLLECTION_NAME, reservationId);
-      await deleteDoc(docRef);
-    } catch (error) {
-      console.error('Error deleting reservation:', error);
-      throw error;
-    }
-  },
-
-  // ✨ NEW: Bulk operations
-  async bulkUpdateReservations(reservationIds: string[], updates: Partial<Reservation>): Promise<void> {
-    try {
-      // Filter out undefined values
-      const cleanUpdates = Object.fromEntries(
-        Object.entries(updates).filter(([_, value]) => value !== undefined)
-      );
-      
-      const promises = reservationIds.map(id => {
-        const docRef = doc(db, COLLECTION_NAME, id);
-        return updateDoc(docRef, { ...cleanUpdates, updatedAt: new Date() });
-      });
-      await Promise.all(promises);
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error bulk updating reservations:', error);
-      throw error;
+      throw new Error(error.response?.data?.message || 'Không thể cập nhật hàng loạt');
     }
   },
 
-  async bulkDeleteReservations(reservationIds: string[]): Promise<void> {
+  async bulkDeleteReservations(reservationIds: number[]): Promise<void> {
     try {
-      const promises = reservationIds.map(id => {
-        const docRef = doc(db, COLLECTION_NAME, id);
-        return deleteDoc(docRef);
+      await apiClient.post('/reservations/bulk-delete', {
+        reservation_ids: reservationIds,
       });
-      await Promise.all(promises);
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error bulk deleting reservations:', error);
-      throw error;
+      throw new Error(error.response?.data?.message || 'Không thể xóa hàng loạt');
     }
   },
 
-  // ✨ NEW: Advanced filtering
-  async getReservationsAdvanced(hotelId: string, filters: {
-    dateRange?: { start: string; end: string };
-    roomTypes?: string[];
-    guestTypes?: string[];
-    paymentStatus?: string[];
-    sources?: string[];
-    minAmount?: number;
-    maxAmount?: number;
-  }): Promise<Reservation[]> {
-    try {
-      let q = query(
-        collection(db, COLLECTION_NAME),
-        where('hotelId', '==', hotelId)
-      );
-
-      const querySnapshot = await getDocs(q);
-      let reservations = querySnapshot.docs.map(doc => ({
-        id: doc.id,
-        ...doc.data()
-      } as Reservation));
-
-      // Client-side filtering for complex conditions
-      if (filters.dateRange) {
-        reservations = reservations.filter(res => 
-          res.checkInDate >= filters.dateRange!.start && 
-          res.checkOutDate <= filters.dateRange!.end
-        );
-      }
-
-      if (filters.roomTypes?.length) {
-        // Get room data to match room types
-        const roomsQuery = query(collection(db, 'rooms'), where('hotelId', '==', hotelId));
-        const roomsSnapshot = await getDocs(roomsQuery);
-        const roomTypeMap = new Map();
-        roomsSnapshot.docs.forEach(doc => {
-          const roomData = doc.data();
-          roomTypeMap.set(doc.id, roomData.roomType);
-        });
-        
-        reservations = reservations.filter(res => {
-          const roomType = roomTypeMap.get(res.roomId);
-          return filters.roomTypes!.includes(roomType || '');
-        });
-      }
-
-      if (filters.paymentStatus?.length) {
-        reservations = reservations.filter(res => 
-          filters.paymentStatus!.includes(res.paymentStatus || 'pending')
-        );
-      }
-
-      if (filters.sources?.length) {
-        reservations = reservations.filter(res => 
-          filters.sources!.includes(res.source || 'direct')
-        );
-      }
-
-      if (filters.minAmount !== undefined) {
-        reservations = reservations.filter(res => res.totalPrice >= filters.minAmount!);
-      }
-
-      if (filters.maxAmount !== undefined) {
-        reservations = reservations.filter(res => res.totalPrice <= filters.maxAmount!);
-      }
-
-      return reservations.sort((a, b) => 
-        new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
-      );
-    } catch (error) {
-      console.error('Error getting reservations with advanced filters:', error);
-      throw error;
-    }
-  },
-
-  // ✨ NEW: Move reservation (for drag-drop)
-  async moveReservation(reservationId: string, newRoomId: string, newDates?: {
+  // Move reservation (for drag-drop)
+  async moveReservation(reservationId: number, newRoomId: number, newDates?: {
     checkInDate: string;
     checkOutDate: string;
-  }): Promise<void> {
+  }): Promise<ReservationResponse> {
     try {
-      const updates: Partial<Reservation> = { roomId: newRoomId };
+      const data: any = { room_id: newRoomId };
       if (newDates) {
-        updates.checkInDate = newDates.checkInDate;
-        updates.checkOutDate = newDates.checkOutDate;
+        data.check_in_date = newDates.checkInDate;
+        data.check_out_date = newDates.checkOutDate;
       }
       
-      // Filter out undefined values
-      const cleanUpdates = Object.fromEntries(
-        Object.entries(updates).filter(([_, value]) => value !== undefined)
-      );
-      
-      const docRef = doc(db, COLLECTION_NAME, reservationId);
-      await updateDoc(docRef, { ...cleanUpdates, updatedAt: new Date() });
-    } catch (error) {
+      const response = await apiClient.post<ReservationResponse>(`/reservations/${reservationId}/move`, data);
+      return response;
+    } catch (error: any) {
       console.error('Error moving reservation:', error);
-      throw error;
+      throw new Error(error.response?.data?.message || 'Không thể chuyển đặt phòng');
     }
   },
 
-  // ✨ NEW: Priority 3 - Modification history
-  async modifyReservation(
-    reservationId: string,
-    changes: Partial<Reservation>,
-    modificationReason?: string,
-    modifiedBy?: string
-  ): Promise<void> {
-    try {
-      const docRef = doc(db, COLLECTION_NAME, reservationId);
-      const currentDoc = await getDoc(docRef);
-      
-      if (!currentDoc.exists()) throw new Error('Reservation not found');
-      
-      const currentData = currentDoc.data() as Reservation;
-      const modificationLog: any = {
-        id: Math.random().toString(36).substr(2, 9),
-        timestamp: new Date(),
-        modifiedBy: modifiedBy || 'system',
-        reason: modificationReason,
-        changes: {}
-      };
-      
-      // Track changes
-      Object.keys(changes).forEach(key => {
-        if (currentData[key as keyof Reservation] !== changes[key as keyof Reservation]) {
-          modificationLog.changes[key] = {
-            from: currentData[key as keyof Reservation],
-            to: changes[key as keyof Reservation]
-          };
-        }
-      });
-      
-      const updatedHistory = [...(currentData.modificationHistory || []), modificationLog];
-      
-      await updateDoc(docRef, {
-        ...changes,
-        modificationHistory: updatedHistory,
-        updatedAt: new Date()
-      });
-    } catch (error) {
-      console.error('Error modifying reservation:', error);
-      throw error;
-    }
-  },
-
-  // ✨ NEW: Get modification history - COMPLETE IMPLEMENTATION
-  async getModificationHistory(reservationId: string): Promise<any[]> {
-    try {
-      const docRef = doc(db, COLLECTION_NAME, reservationId);
-      const docSnap = await getDoc(docRef);
-      
-      if (docSnap.exists()) {
-        const data = docSnap.data() as Reservation;
-        const history = data.modificationHistory || [];
-        
-        // Sort by timestamp descending (newest first)
-        return history.sort((a, b) => {
-          const timeA = a.timestamp instanceof Date ? a.timestamp.getTime() : new Date(a.timestamp).getTime();
-          const timeB = b.timestamp instanceof Date ? b.timestamp.getTime() : new Date(b.timestamp).getTime();
-          return timeB - timeA;
-        });
-      }
-      return [];
-    } catch (error) {
-      console.error('Error getting modification history:', error);
-      throw error;
-    }
-  },
-
-  // ✨ NEW: Export reservations
+  // Export reservations
   async exportReservations(
-    hotelId: string,
     filters: any,
     format: 'csv' | 'excel' | 'pdf'
   ): Promise<Blob> {
     try {
-      const reservations = await this.getReservationsAdvanced(hotelId, filters);
-      
-      if (format === 'csv') {
-        const csvContent = this.generateCSV(reservations);
-        return new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-      }
-      
-      if (format === 'excel') {
-        const excelContent = this.generateExcel(reservations);
-        return new Blob([excelContent], { type: 'text/csv;charset=utf-8;' });
-      }
-      
-      if (format === 'pdf') {
-        const pdfContent = this.generatePDF(reservations);
-        return new Blob([pdfContent], { type: 'text/plain;charset=utf-8;' });
-      }
-      
-      throw new Error('Unsupported format');
-    } catch (error) {
+      const response = await apiClient.get('/reservations/export', {
+        params: { ...filters, format },
+        responseType: 'blob',
+      });
+      return response as unknown as Blob;
+    } catch (error: any) {
       console.error('Error exporting reservations:', error);
-      throw error;
+      throw new Error(error.response?.data?.message || 'Không thể xuất dữ liệu');
     }
   },
 
-  // Helper: Generate CSV
-  generateCSV(reservations: Reservation[]): string {
-    const headers = [
-      'ID', 'Guest Name', 'Room Number', 'Check-in', 'Check-out', 
-      'Status', 'Total Price', 'Payment Status', 'Source', 'Confirmation Code'
-    ];
-    
-    const rows = reservations.map(res => [
-      res.id,
-      res.guestName || '',
-      res.roomNumber || '',
-      res.checkInDate,
-      res.checkOutDate,
-      res.status,
-      res.totalPrice,
-      res.paymentStatus,
-      res.source,
-      res.confirmationCode
-    ]);
-    
-    return [headers, ...rows].map(row => row.join(',')).join('\n');
-  },
-
-  // Helper: Generate Excel
-  generateExcel(reservations: Reservation[]): string {
-    // Simple CSV format for now - can be enhanced with actual Excel library
-    return this.generateCSV(reservations);
-  },
-
-  // Helper: Generate PDF
-  generatePDF(reservations: Reservation[]): string {
-    // Simple text format for now - can be enhanced with actual PDF library
-    let content = 'Reservations Report\n\n';
-    reservations.forEach((res, index) => {
-      content += `${index + 1}. ${res.guestName || 'N/A'} - Room ${res.roomNumber || 'N/A'}\n`;
-      content += `   ${res.checkInDate} to ${res.checkOutDate} - ${res.status}\n`;
-      content += `   Total: ${res.totalPrice} - ${res.paymentStatus}\n\n`;
-    });
-    return content;
-  },
-
-  // ✨ NEW: Detect conflicts
-  async detectConflicts(hotelId: string): Promise<any> {
+  // Detect conflicts
+  async detectConflicts(): Promise<any> {
     try {
-      const reservations = await this.getReservations(hotelId);
-      const conflicts: any[] = [];
-      
-      // Find overlapping reservations
-      for (let i = 0; i < reservations.length; i++) {
-        for (let j = i + 1; j < reservations.length; j++) {
-          const r1 = reservations[i], r2 = reservations[j];
-          if (r1.roomId === r2.roomId && 
-              r1.checkInDate < r2.checkOutDate && 
-              r1.checkOutDate > r2.checkInDate &&
-              !['cancelled'].includes(r1.status) &&
-              !['cancelled'].includes(r2.status)) {
-            conflicts.push({ 
-              roomId: r1.roomId, 
-              date: r1.checkInDate,
-              reservations: [r1, r2] 
-            });
-          }
-        }
-      }
-      
-      return {
-        conflicts,
-        totalConflicts: conflicts.length,
-        affectedRooms: [...new Set(conflicts.map(c => c.roomId))]
-      };
-    } catch (error) {
+      const response = await apiClient.get<any>('/reservations/conflicts');
+      return response;
+    } catch (error: any) {
       console.error('Error detecting conflicts:', error);
-      throw error;
+      throw new Error(error.response?.data?.message || 'Không thể kiểm tra xung đột');
     }
   },
 
-  // ✨ NEW: Calculate occupancy
+  // Calculate occupancy
   async calculateOccupancy(
-    hotelId: string,
     startDate: string,
     endDate: string
   ): Promise<any> {
     try {
-      const reservations = await this.getReservations(hotelId);
-      const roomsQuery = query(collection(db, 'rooms'), where('hotelId', '==', hotelId));
-      const roomsSnapshot = await getDocs(roomsQuery);
-      const totalRooms = roomsSnapshot.docs.length;
-      
-      const dailyOccupancy = [];
-      let currentDate = new Date(startDate);
-      const end = new Date(endDate);
-      
-      while (currentDate <= end) {
-        const dateStr = currentDate.toISOString().split('T')[0];
-        const occupiedRooms = reservations.filter(res => 
-          res.checkInDate <= dateStr && 
-          res.checkOutDate > dateStr &&
-          !['cancelled'].includes(res.status)
-        ).length;
-        
-        dailyOccupancy.push({
-          date: dateStr,
-          occupiedRooms,
-          totalRooms,
-          percentage: Math.round((occupiedRooms / totalRooms) * 100)
-        });
-        
-        currentDate.setDate(currentDate.getDate() + 1);
-      }
-      
-      const averageOccupancy = Math.round(
-        dailyOccupancy.reduce((sum, day) => sum + day.percentage, 0) / dailyOccupancy.length
-      );
-      
-      return {
-        dateRange: { start: startDate, end: endDate },
-        dailyOccupancy,
-        averageOccupancy
-      };
-    } catch (error) {
+      const response = await apiClient.get<any>('/reservations/occupancy', {
+        params: {
+          start_date: startDate,
+          end_date: endDate,
+        },
+      });
+      return response;
+    } catch (error: any) {
       console.error('Error calculating occupancy:', error);
-      throw error;
+      throw new Error(error.response?.data?.message || 'Không thể tính tỷ lệ lấp đầy');
     }
-  }
+  },
 };

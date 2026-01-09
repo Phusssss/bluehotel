@@ -1,134 +1,166 @@
-import { 
-  signInWithEmailAndPassword, 
-  signOut, 
-  createUserWithEmailAndPassword,
-  onAuthStateChanged,
-  sendPasswordResetEmail,
-  sendEmailVerification,
-  updatePassword,
-  updateEmail,
-  reauthenticateWithCredential,
-  EmailAuthProvider
-} from 'firebase/auth';
-import type { User as FirebaseUser } from 'firebase/auth';
-import { doc, getDoc, setDoc } from 'firebase/firestore';
-import { auth, db } from '../config/firebaseConfig';
+import { apiClient } from './api';
 import type { User } from '../types';
-import { formatFirebaseError } from '../utils/errorUtils';
+
+interface LoginCredentials {
+  email: string;
+  password: string;
+}
+
+interface RegisterData {
+  email: string;
+  password: string;
+  name: string;
+  role?: string;
+}
+
+interface AuthResponse {
+  access_token: string;
+  refresh_token: string;
+  user: {
+    id: number;
+    email: string;
+    name: string;
+    role: string;
+    permissions: string[];
+  };
+}
 
 export const authService = {
   // Sign in
   async signIn(email: string, password: string) {
     try {
-      const result = await signInWithEmailAndPassword(auth, email, password);
-      return result.user;
+      const response = await apiClient.post<AuthResponse>('/auth/login', {
+        email,
+        password,
+      });
+      
+      // Store tokens
+      localStorage.setItem('access_token', response.access_token);
+      localStorage.setItem('refresh_token', response.refresh_token);
+      localStorage.setItem('user', JSON.stringify(response.user));
+      
+      return response.user;
     } catch (error: any) {
-      throw new Error(formatFirebaseError(error));
+      throw new Error(error.response?.data?.message || 'Đăng nhập thất bại');
     }
   },
 
   // Sign out
   async signOut() {
     try {
-      await signOut(auth);
-    } catch (error: any) {
-      throw new Error(formatFirebaseError(error));
+      await apiClient.post('/auth/logout', {});
+    } catch (error) {
+      // Ignore logout errors
+    } finally {
+      localStorage.removeItem('access_token');
+      localStorage.removeItem('refresh_token');
+      localStorage.removeItem('user');
     }
   },
 
   // Create user
-  async createUser(email: string, password: string, userData: Partial<User>) {
+  async createUser(email: string, password: string, userData: RegisterData) {
     try {
-      const result = await createUserWithEmailAndPassword(auth, email, password);
-      
-      // Create user profile in Firestore
-      const userProfile: User = {
-        id: result.user.uid,
+      const response = await apiClient.post<AuthResponse>('/auth/register', {
         email,
+        password,
+        name: userData.name,
         role: userData.role || 'staff',
-        hotelId: userData.hotelId || '',
-        staffId: userData.staffId,
-        permissions: userData.permissions || [],
-        isActive: true,
-        createdAt: new Date(),
-      };
-
-      await setDoc(doc(db, 'users', result.user.uid), userProfile);
-      return result.user;
+      });
+      
+      // Store tokens
+      localStorage.setItem('access_token', response.access_token);
+      localStorage.setItem('refresh_token', response.refresh_token);
+      localStorage.setItem('user', JSON.stringify(response.user));
+      
+      return response.user;
     } catch (error: any) {
-      throw new Error(formatFirebaseError(error));
+      throw new Error(error.response?.data?.message || 'Đăng ký thất bại');
     }
   },
 
   // Get user profile
-  async getUserProfile(uid: string): Promise<User | null> {
+  async getUserProfile(): Promise<User | null> {
     try {
-      const docRef = doc(db, 'users', uid);
-      const docSnap = await getDoc(docRef);
-      
-      if (docSnap.exists()) {
-        return { id: docSnap.id, ...docSnap.data() } as User;
-      }
-      return null;
+      const response = await apiClient.get<{ user: User }>('/auth/me');
+      return response.user;
     } catch (error: any) {
-      throw new Error(formatFirebaseError(error));
+      throw new Error(error.response?.data?.message || 'Không thể lấy thông tin người dùng');
     }
   },
 
   // Password reset
   async sendPasswordResetEmail(email: string) {
     try {
-      await sendPasswordResetEmail(auth, email);
+      await apiClient.post('/auth/forgot-password', { email });
     } catch (error: any) {
-      throw new Error(formatFirebaseError(error));
-    }
-  },
-
-  // Email verification
-  async sendEmailVerification(user: FirebaseUser) {
-    try {
-      await sendEmailVerification(user);
-    } catch (error: any) {
-      throw new Error(formatFirebaseError(error));
+      throw new Error(error.response?.data?.message || 'Không thể gửi email đặt lại mật khẩu');
     }
   },
 
   // Update password
-  async updatePassword(newPassword: string) {
+  async updatePassword(currentPassword: string, newPassword: string) {
     try {
-      const user = auth.currentUser;
-      if (!user) throw new Error('Không có người dùng đăng nhập');
-      await updatePassword(user, newPassword);
+      await apiClient.post('/auth/change-password', {
+        current_password: currentPassword,
+        new_password: newPassword,
+      });
     } catch (error: any) {
-      throw new Error(formatFirebaseError(error));
+      throw new Error(error.response?.data?.message || 'Không thể cập nhật mật khẩu');
     }
   },
 
-  // Update email
-  async updateEmail(newEmail: string) {
+  // Update profile
+  async updateProfile(data: Partial<User>) {
     try {
-      const user = auth.currentUser;
-      if (!user) throw new Error('Không có người dùng đăng nhập');
-      await updateEmail(user, newEmail);
+      const response = await apiClient.put<{ user: User }>('/auth/profile', data);
+      // Update stored user data
+      localStorage.setItem('user', JSON.stringify(response.user));
+      return response.user;
     } catch (error: any) {
-      throw new Error(formatFirebaseError(error));
+      throw new Error(error.response?.data?.message || 'Không thể cập nhật thông tin');
     }
   },
 
-  // Re-authenticate
-  async reauthenticate(password: string) {
-    try {
-      const user = auth.currentUser;
-      if (!user || !user.email) throw new Error('Không có người dùng đăng nhập');
-      const credential = EmailAuthProvider.credential(user.email, password);
-      await reauthenticateWithCredential(user, credential);
-    } catch (error: any) {
-      throw new Error(formatFirebaseError(error));
-    }
+  // Check if user is authenticated
+  isAuthenticated(): boolean {
+    const token = localStorage.getItem('access_token');
+    return !!token;
   },
 
-  // Auth state observer
-  onAuthStateChanged: (callback: (user: FirebaseUser | null) => void) => {
-    return onAuthStateChanged(auth, callback);
-  }
+  // Get current user from localStorage
+  getCurrentUser(): User | null {
+    const userStr = localStorage.getItem('user');
+    if (userStr) {
+      try {
+        return JSON.parse(userStr);
+      } catch (error) {
+        return null;
+      }
+    }
+    return null;
+  },
+
+  // Refresh token
+  async refreshToken() {
+    try {
+      const refreshToken = localStorage.getItem('refresh_token');
+      if (!refreshToken) {
+        throw new Error('No refresh token');
+      }
+
+      const response = await apiClient.post<{ access_token: string }>('/auth/refresh', {
+        refresh_token: refreshToken,
+      });
+
+      localStorage.setItem('access_token', response.access_token);
+      return response.access_token;
+    } catch (error: any) {
+      // Clear tokens if refresh fails
+      localStorage.removeItem('access_token');
+      localStorage.removeItem('refresh_token');
+      localStorage.removeItem('user');
+      throw error;
+    }
+  },
 };
